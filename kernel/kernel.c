@@ -3,7 +3,11 @@
 #include "drivers/keyboard.h"
 #include "include/idt.h"
 #include "include/pic.h"
+#include "include/pmm.h"
+#include "include/paging.h"
 #include "shell/shell.h"
+
+extern uint32_t _kernel_end;
 
 void kernel_main(void) {
     /* Initialize drivers */
@@ -36,6 +40,11 @@ void kernel_main(void) {
     pic_init();
     idt_init();
     vga_write("[OK] Interrupts enabled (IDT + PIC)\n");
+
+    /* Initialize memory management */
+    pmm_init((uint32_t)&_kernel_end);
+    paging_init();
+    vga_write("[OK] Memory manager ready (PMM + Paging)\n");
 
     /* Initialize keyboard */
     keyboard_init();

@@ -11,6 +11,8 @@ set(KERNEL_SOURCES
     kernel/kernel.c
     kernel/idt.c
     kernel/pic.c
+    kernel/pmm.c
+    kernel/paging.c
     kernel/drivers/vga.c
     kernel/drivers/serial.c
     kernel/drivers/keyboard.c

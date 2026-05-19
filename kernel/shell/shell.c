@@ -3,6 +3,7 @@
 #include "drivers/serial.h"
 #include "lib/string.h"
 #include "include/io.h"
+#include "include/pmm.h"
 
 #define CMD_MAX_LEN 78
 #define PROMPT_STR  "> "
@@ -24,6 +25,7 @@ static void shell_execute(const char *cmd) {
         vga_write("  help     - Show this help\n");
         vga_write("  clear    - Clear the screen\n");
         vga_write("  version  - Show system info\n");
+        vga_write("  meminfo  - Show memory usage\n");
         vga_write("  reboot   - Reboot the system\n");
     } else if (strcmp(cmd, "clear") == 0) {
         vga_clear();
@@ -34,6 +36,22 @@ static void shell_execute(const char *cmd) {
         vga_write("CPU: Intel 486, 66 MHz\n");
         vga_write("RAM: 32 MB\n");
         vga_write("GPU: Cirrus Logic GD5446\n");
+    } else if (strcmp(cmd, "meminfo") == 0) {
+        uint32_t free_kb = pmm_free_count() * 4;
+        uint32_t used_kb = pmm_used_count() * 4;
+        uint32_t total_kb = TOTAL_MEMORY / 1024;
+        vga_write("Memory: ");
+        vga_write_dec(total_kb);
+        vga_write(" KB total, ");
+        vga_write_dec(used_kb);
+        vga_write(" KB used, ");
+        vga_write_dec(free_kb);
+        vga_write(" KB free\n");
+        vga_write("Pages:  ");
+        vga_write_dec(pmm_used_count());
+        vga_write(" used, ");
+        vga_write_dec(pmm_free_count());
+        vga_write(" free (4 KB each)\n");
     } else if (strcmp(cmd, "reboot") == 0) {
         vga_write("Rebooting...\n");
         serial_write("Rebooting...\n");

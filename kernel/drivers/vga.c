@@ -94,3 +94,19 @@ void vga_write(const char *str) {
         vga_putchar(*str++);
     }
 }
+
+void vga_write_dec(uint32_t val) {
+    if (val == 0) {
+        vga_putchar('0');
+        return;
+    }
+    char buf[10];
+    int i = 0;
+    while (val > 0) {
+        buf[i++] = '0' + (val % 10);
+        val /= 10;
+    }
+    while (i > 0) {
+        vga_putchar(buf[--i]);
+    }
+}
