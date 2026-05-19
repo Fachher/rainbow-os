@@ -1,6 +1,7 @@
 #include "drivers/vga.h"
 #include "drivers/serial.h"
 #include "drivers/keyboard.h"
+#include "drivers/svga.h"
 #include "include/idt.h"
 #include "include/pic.h"
 #include "include/pmm.h"
@@ -50,6 +51,10 @@ void kernel_main(void) {
     /* Initialize filesystem */
     ramdisk_init();
     vga_write("[OK] FAT12 ramdisk ready\n");
+
+    /* Initialize SVGA */
+    svga_init();
+    vga_write("[OK] SVGA ready (Cirrus GD5446)\n");
 
     /* Initialize keyboard */
     keyboard_init();

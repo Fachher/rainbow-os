@@ -5,6 +5,7 @@
 #include "include/io.h"
 #include "include/pmm.h"
 #include "fs/fat12.h"
+#include "drivers/svga.h"
 
 #define CMD_MAX_LEN 78
 #define PROMPT_STR  "> "
@@ -29,6 +30,7 @@ static void shell_execute(const char *cmd) {
         vga_write("  meminfo  - Show memory usage\n");
         vga_write("  ls       - List files\n");
         vga_write("  cat FILE - Show file contents\n");
+        vga_write("  gfx      - Graphics demo (640x480)\n");
         vga_write("  reboot   - Reboot the system\n");
     } else if (strcmp(cmd, "clear") == 0) {
         vga_clear();
@@ -90,6 +92,55 @@ static void shell_execute(const char *cmd) {
                 }
             }
         }
+    } else if (strcmp(cmd, "gfx") == 0) {
+        svga_set_mode_gfx();
+        svga_clear(0);
+
+        /* Rainbow arc */
+        for (int band = 0; band < 7; band++) {
+            uint8_t color = 1 + band * 27;   /* Spread across rainbow palette */
+            int r_outer = 200 - band * 20;
+            int r_inner = r_outer - 18;
+            int cx = 320, cy = 380;
+            for (int y = cy - r_outer; y <= cy; y++) {
+                for (int x = cx - r_outer; x <= cx + r_outer; x++) {
+                    int dx = x - cx, dy = y - cy;
+                    int dist_sq = dx * dx + dy * dy;
+                    if (dist_sq >= r_inner * r_inner && dist_sq <= r_outer * r_outer) {
+                        svga_putpixel(x, y, color);
+                    }
+                }
+            }
+        }
+
+        /* Color bars at bottom */
+        int bar_w = SVGA_WIDTH / 192;
+        if (bar_w < 1) bar_w = 1;
+        for (int i = 0; i < 192; i++) {
+            svga_fill_rect(i * bar_w + (SVGA_WIDTH - 192 * bar_w) / 2,
+                          430, bar_w, 30, 1 + i);
+        }
+
+        /* Title text (simple pixel letters: "RAINBOW-OS") */
+        /* Draw a white box with title area */
+        svga_fill_rect(220, 20, 200, 30, 255);
+        svga_fill_rect(222, 22, 196, 26, 0);
+
+        /* Wait for any key to return to text mode */
+        /* The keyboard IRQ will still fire — we just need any keypress */
+        serial_write("GFX demo active. Press any key for text mode.\n");
+
+        /* Spin until a key is pressed (simple approach: wait for scancode) */
+        while (!(inb(0x64) & 0x01))
+            __asm__ volatile("hlt");
+        inb(0x60);  /* Consume the scancode */
+
+        svga_set_mode_text();
+        vga_init();
+
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_write("[OK] Returned to text mode\n");
+        vga_set_color(VGA_WHITE, VGA_BLACK);
     } else if (strcmp(cmd, "reboot") == 0) {
         vga_write("Rebooting...\n");
         serial_write("Rebooting...\n");

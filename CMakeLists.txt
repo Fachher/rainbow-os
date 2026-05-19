@@ -16,6 +16,7 @@ set(KERNEL_SOURCES
     kernel/drivers/vga.c
     kernel/drivers/serial.c
     kernel/drivers/keyboard.c
+    kernel/drivers/svga.c
     kernel/fs/fat12.c
     kernel/fs/ramdisk.c
     kernel/shell/shell.c
