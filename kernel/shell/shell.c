@@ -4,6 +4,7 @@
 #include "lib/string.h"
 #include "include/io.h"
 #include "include/pmm.h"
+#include "fs/fat12.h"
 
 #define CMD_MAX_LEN 78
 #define PROMPT_STR  "> "
@@ -26,6 +27,8 @@ static void shell_execute(const char *cmd) {
         vga_write("  clear    - Clear the screen\n");
         vga_write("  version  - Show system info\n");
         vga_write("  meminfo  - Show memory usage\n");
+        vga_write("  ls       - List files\n");
+        vga_write("  cat FILE - Show file contents\n");
         vga_write("  reboot   - Reboot the system\n");
     } else if (strcmp(cmd, "clear") == 0) {
         vga_clear();
@@ -52,6 +55,41 @@ static void shell_execute(const char *cmd) {
         vga_write(" used, ");
         vga_write_dec(pmm_free_count());
         vga_write(" free (4 KB each)\n");
+    } else if (strcmp(cmd, "ls") == 0) {
+        struct fat12_dirent entries[FAT12_MAX_FILES];
+        int count = fat12_list_root(entries, FAT12_MAX_FILES);
+        for (int i = 0; i < count; i++) {
+            vga_write("  ");
+            vga_write(entries[i].name);
+            /* Pad to column 16 */
+            int pad = 14 - (int)strlen(entries[i].name);
+            while (pad-- > 0) vga_putchar(' ');
+            vga_write_dec(entries[i].size);
+            vga_write(" bytes\n");
+        }
+    } else if (strncmp(cmd, "cat ", 4) == 0) {
+        const char *filename = cmd + 4;
+        while (*filename == ' ') filename++;
+        if (*filename == '\0') {
+            vga_write("Usage: cat <filename>\n");
+        } else {
+            static uint8_t file_buf[4096];
+            int bytes = fat12_read_file(filename, file_buf, sizeof(file_buf) - 1);
+            if (bytes < 0) {
+                vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+                vga_write("File not found: ");
+                vga_set_color(VGA_WHITE, VGA_BLACK);
+                vga_write(filename);
+                vga_putchar('\n');
+            } else {
+                file_buf[bytes] = '\0';
+                /* Print, converting \r\n to \n */
+                for (int i = 0; i < bytes; i++) {
+                    if (file_buf[i] == '\r') continue;
+                    vga_putchar(file_buf[i]);
+                }
+            }
+        }
     } else if (strcmp(cmd, "reboot") == 0) {
         vga_write("Rebooting...\n");
         serial_write("Rebooting...\n");

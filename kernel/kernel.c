@@ -5,6 +5,7 @@
 #include "include/pic.h"
 #include "include/pmm.h"
 #include "include/paging.h"
+#include "fs/ramdisk.h"
 #include "shell/shell.h"
 
 extern uint32_t _kernel_end;
@@ -45,6 +46,10 @@ void kernel_main(void) {
     pmm_init((uint32_t)&_kernel_end);
     paging_init();
     vga_write("[OK] Memory manager ready (PMM + Paging)\n");
+
+    /* Initialize filesystem */
+    ramdisk_init();
+    vga_write("[OK] FAT12 ramdisk ready\n");
 
     /* Initialize keyboard */
     keyboard_init();

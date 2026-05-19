@@ -16,6 +16,8 @@ set(KERNEL_SOURCES
     kernel/drivers/vga.c
     kernel/drivers/serial.c
     kernel/drivers/keyboard.c
+    kernel/fs/fat12.c
+    kernel/fs/ramdisk.c
     kernel/shell/shell.c
     kernel/lib/string.c
 )
@@ -26,6 +28,7 @@ target_include_directories(kernel.elf PRIVATE
     ${CMAKE_SOURCE_DIR}/kernel
     ${CMAKE_SOURCE_DIR}/kernel/include
     ${CMAKE_SOURCE_DIR}/kernel/drivers
+    ${CMAKE_SOURCE_DIR}/kernel/fs
     ${CMAKE_SOURCE_DIR}/kernel/shell
     ${CMAKE_SOURCE_DIR}/kernel/lib
 )
