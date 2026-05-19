@@ -1,0 +1,8 @@
+build/
+.idea/
+cmake-build-*/
+*.img
+*.bin
+*.o
+*.elf
+.DS_Store
