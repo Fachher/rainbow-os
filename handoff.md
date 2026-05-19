@@ -6,17 +6,17 @@ Ein eigenes 32-Bit Betriebssystem mit Custom Bootloader fuer eine Intel 486 Plat
 
 ## Aktueller Stand
 
-Meilensteine 1-3 sind abgeschlossen. Das System bootet von Floppy, wechselt in den Protected Mode und gibt Text auf dem Bildschirm und der seriellen Konsole aus.
+Meilensteine 1-7 sind abgeschlossen. Das System hat einen funktionierenden Kernel mit Interrupts, Shell, Speicherverwaltung und Dateisystem.
 
 | Meilenstein | Status |
 |---|---|
 | M1: Bootloader (2-Stufen, Protected Mode) | fertig |
 | M2: VGA Textmodus (80x25) | fertig |
 | M3: Serielle Konsole (COM1 Logging) | fertig |
-| M4: Tastatureingabe (PS/2, IDT, PIC) | offen |
-| M5: Shell | offen |
-| M6: Speicherverwaltung (PMM, Paging) | offen |
-| M7: FAT12/FAT16 Dateisystem | offen |
+| M4: Tastatureingabe (PS/2, IDT, PIC) | fertig |
+| M5: Shell | fertig |
+| M6: Speicherverwaltung (PMM, Paging) | fertig |
+| M7: FAT12 Dateisystem (Ramdisk) | fertig |
 | M8: SVGA Grafik (Cirrus GD5446) | offen |
 | M9: HDD Boot | offen |
 
@@ -92,7 +92,7 @@ BIOS
   -> entry.asm (_start, 0x100000)
        Stack einrichten, kernel_main() aufrufen
   -> kernel.c (kernel_main)
-       Serial init, VGA init, Willkommensmeldung
+       Serial, VGA, PIC, IDT, PMM, Paging, Ramdisk, Keyboard, Shell
 ```
 
 ### Floppy-Layout
@@ -124,16 +124,31 @@ rainbow-os/
 │   └── stage2.asm          # Stage 2: GDT, PM-Switch, Kernel laden
 ├── kernel/
 │   ├── entry.asm           # _start -> kernel_main()
+│   ├── isr_stubs.asm       # ISR/IRQ Assembly-Stubs (32 Exceptions + 16 IRQs)
 │   ├── kernel.c            # Kernel-Hauptfunktion
+│   ├── idt.c               # IDT Setup + Interrupt-Dispatcher
+│   ├── pic.c               # 8259A PIC Remap + EOI
+│   ├── pmm.c               # Physischer Speichermanager (Bitmap, 4K Frames)
+│   ├── paging.c            # Paging (Identity Map 32 MB)
 │   ├── linker.ld           # Linker-Skript (Base 0x100000, 4K-aligned)
 │   ├── drivers/
 │   │   ├── vga.c/h         # VGA Textmodus: putchar, write, scroll, cursor
-│   │   └── serial.c/h      # COM1: init, putchar, write, hex/dec output
+│   │   ├── serial.c/h      # COM1: init, putchar, write, hex/dec output
+│   │   └── keyboard.c/h    # PS/2 Tastatur: IRQ1, Scancode Set 1, Shift
+│   ├── fs/
+│   │   ├── fat12.c/h       # FAT12 Read-Only Treiber (BPB, FAT-Chain, Verzeichnis)
+│   │   └── ramdisk.c/h     # 64 KB FAT12 Ramdisk (beim Boot formatiert)
+│   ├── shell/
+│   │   └── shell.c/h       # Kommandozeile (help, clear, version, meminfo, ls, cat, reboot)
 │   ├── lib/
-│   │   └── string.c/h      # memset, memcpy, strlen
+│   │   └── string.c/h      # memset, memcpy, strlen, strcmp, strncmp
 │   └── include/
 │       ├── types.h          # uint8/16/32_t, size_t
-│       └── io.h             # inb(), outb(), io_wait()
+│       ├── io.h             # inb(), outb(), io_wait()
+│       ├── idt.h            # IDT Structs, ISR-Frame, Handler-Typedef
+│       ├── pic.h            # PIC Konstanten und API
+│       ├── pmm.h            # PMM API (alloc/free frame)
+│       └── paging.h         # Paging API
 ├── cmake/
 │   └── i686-elf-toolchain.cmake
 ├── scripts/
@@ -153,10 +168,11 @@ rainbow-os/
 
 4. **Kernel-Groesse:** Aktuell werden 64 Sektoren (32 KB) fuer den Kernel geladen. Bei groesserem Kernel muss `KERNEL_SECTORS` in `stage2.asm` erhoeht und ggf. Multi-Track-Loading implementiert werden (INT 13h kann nicht ueber Track-Grenzen lesen).
 
-## Naechster Meilenstein: M4 Tastatureingabe
+## Naechster Meilenstein: M8 SVGA Grafik
 
 Erfordert:
-- **IDT** (Interrupt Descriptor Table) einrichten
-- **PIC** (8259A) programmieren -- IRQs auf ISR 32-47 remappen
-- **ISR-Stubs** in Assembly (Register sichern, C-Handler aufrufen)
-- **PS/2 Tastatur-Treiber** -- IRQ1 Handler, Scancode-Tabelle
+- **Cirrus GD5446** SVGA-Treiber (MMIO oder VBE)
+- Grafikmodus setzen (z.B. 640x480x8bpp oder 800x600)
+- Pixel zeichnen, Linien, Rechtecke
+- Framebuffer-Zugriff
+- Shell-Kommando zum Umschalten zwischen Text/Grafik
