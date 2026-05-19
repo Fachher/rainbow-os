@@ -7,9 +7,13 @@ set(CMAKE_ASM_NASM_FLAGS "-g -F dwarf")
 # --- Kernel sources ---
 set(KERNEL_SOURCES
     kernel/entry.asm
+    kernel/isr_stubs.asm
     kernel/kernel.c
+    kernel/idt.c
+    kernel/pic.c
     kernel/drivers/vga.c
     kernel/drivers/serial.c
+    kernel/drivers/keyboard.c
     kernel/lib/string.c
 )
 

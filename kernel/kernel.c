@@ -1,5 +1,8 @@
 #include "drivers/vga.h"
 #include "drivers/serial.h"
+#include "drivers/keyboard.h"
+#include "include/idt.h"
+#include "include/pic.h"
 
 void kernel_main(void) {
     /* Initialize drivers */
@@ -28,10 +31,22 @@ void kernel_main(void) {
     vga_write("[OK] Kernel loaded successfully\n");
     vga_write("[OK] Serial console on COM1 (38400 baud)\n");
 
+    /* Initialize interrupts */
+    pic_init();
+    idt_init();
+    vga_write("[OK] Interrupts enabled (IDT + PIC)\n");
+
+    /* Initialize keyboard */
+    keyboard_init();
+    vga_write("[OK] PS/2 keyboard ready\n");
+
+    vga_set_color(VGA_WHITE, VGA_BLACK);
+    vga_write("\n> ");
+
     serial_log("Kernel startup complete");
     serial_write("System: 486/66MHz, 32MB RAM, Cirrus GD5446\n");
 
-    /* Halt loop */
+    /* Halt loop - wakes on interrupt (keyboard), then halts again */
     while (1) {
         __asm__ volatile("hlt");
     }
