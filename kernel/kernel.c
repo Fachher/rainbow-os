@@ -3,6 +3,7 @@
 #include "drivers/keyboard.h"
 #include "include/idt.h"
 #include "include/pic.h"
+#include "shell/shell.h"
 
 void kernel_main(void) {
     /* Initialize drivers */
@@ -41,10 +42,13 @@ void kernel_main(void) {
     vga_write("[OK] PS/2 keyboard ready\n");
 
     vga_set_color(VGA_WHITE, VGA_BLACK);
-    vga_write("\n> ");
+    vga_write("\n");
 
     serial_log("Kernel startup complete");
     serial_write("System: 486/66MHz, 32MB RAM, Cirrus GD5446\n");
+
+    /* Start shell */
+    shell_init();
 
     /* Halt loop - wakes on interrupt (keyboard), then halts again */
     while (1) {

@@ -1,9 +1,9 @@
 #include "keyboard.h"
-#include "vga.h"
 #include "serial.h"
 #include "include/idt.h"
 #include "include/pic.h"
 #include "include/io.h"
+#include "shell/shell.h"
 
 #define KBD_DATA_PORT   0x60
 #define KBD_STATUS_PORT 0x64
@@ -66,8 +66,7 @@ static void keyboard_irq_handler(struct isr_frame *frame) {
     }
 
     if (c) {
-        vga_putchar(c);
-        serial_putchar(c);
+        shell_putchar(c);
     }
 }
 

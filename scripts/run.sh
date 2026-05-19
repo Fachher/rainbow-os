@@ -8,6 +8,5 @@ qemu-system-i386 \
     -vga cirrus \
     -drive file="$BUILD_DIR/rainbow-os.img",format=raw,if=floppy \
     -serial stdio \
-    -no-reboot \
     -no-shutdown \
     -d guest_errors
