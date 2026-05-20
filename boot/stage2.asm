@@ -3,7 +3,7 @@
 ; Loaded at 0x1000:0x0000 (linear 0x10000)
 ;
 ; Tasks:
-;   1. Load kernel sectors from floppy into temp buffer (Real Mode)
+;   1. Load kernel sectors from boot drive into temp buffer (Real Mode)
 ;   2. Set up GDT (flat model, 4 GB segments)
 ;   3. Switch to 32-bit Protected Mode
 ;   4. Copy kernel to 0x100000 (1 MB)
@@ -19,10 +19,13 @@ KERNEL_START_SECTOR equ 6              ; Kernel starts at sector 6 (1-indexed)
 KERNEL_SECTORS      equ 64             ; 64 sectors = 32 KB max kernel size
 
 stage2_start:
-    ; Set up segments (we're at 0x1000:0x0000)
+    ; Set up segments first (we're at 0x1000:0x0000)
     mov ax, cs
     mov ds, ax
     mov es, ax
+
+    ; Save boot drive (passed from Stage 1 in DL)
+    mov [boot_drive], dl
 
     ; Print message
     mov si, msg_stage2
@@ -38,7 +41,7 @@ stage2_start:
     mov ch, 0                           ; Cylinder 0
     mov cl, KERNEL_START_SECTOR         ; Start sector
     mov dh, 0                           ; Head 0
-    mov dl, 0x00                        ; Floppy A:
+    mov dl, [boot_drive]                ; Boot drive (floppy or HDD)
     int 0x13
     jc .disk_error
 
@@ -90,6 +93,7 @@ print_rm16:
 msg_stage2:     db "Stage 2 loaded", 13, 10, 0
 msg_pm:         db "Entering Protected Mode...", 13, 10, 0
 msg_disk_err:   db "Kernel load error!", 13, 10, 0
+boot_drive:     db 0
 
 ; =============================================================================
 ; GDT - Global Descriptor Table (Flat Model)

@@ -63,3 +63,14 @@ add_custom_target(floppy ALL
         ${CMAKE_BINARY_DIR}/rainbow-os.img
     COMMENT "Creating floppy image"
 )
+
+# --- HDD image ---
+add_custom_target(hdd ALL
+    DEPENDS kernel.elf bootloader
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/mkimage-hdd.sh
+        ${CMAKE_BINARY_DIR}/boot.bin
+        ${CMAKE_BINARY_DIR}/stage2.bin
+        ${CMAKE_BINARY_DIR}/kernel.bin
+        ${CMAKE_BINARY_DIR}/rainbow-os-hdd.img
+    COMMENT "Creating HDD image"
+)

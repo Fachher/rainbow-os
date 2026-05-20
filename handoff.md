@@ -6,7 +6,7 @@ Ein eigenes 32-Bit Betriebssystem mit Custom Bootloader fuer eine Intel 486 Plat
 
 ## Aktueller Stand
 
-Meilensteine 1-7 sind abgeschlossen. Das System hat einen funktionierenden Kernel mit Interrupts, Shell, Speicherverwaltung und Dateisystem.
+Alle 9 Meilensteine sind abgeschlossen. Das System hat einen voll funktionsfaehigen Kernel mit Interrupts, Shell, Speicherverwaltung, Dateisystem, SVGA-Grafik und bootet von Floppy oder HDD.
 
 | Meilenstein | Status |
 |---|---|
@@ -17,8 +17,8 @@ Meilensteine 1-7 sind abgeschlossen. Das System hat einen funktionierenden Kerne
 | M5: Shell | fertig |
 | M6: Speicherverwaltung (PMM, Paging) | fertig |
 | M7: FAT12 Dateisystem (Ramdisk) | fertig |
-| M8: SVGA Grafik (Cirrus GD5446) | offen |
-| M9: HDD Boot | offen |
+| M8: SVGA Grafik (Cirrus GD5446) | fertig |
+| M9: HDD Boot | fertig |
 
 ## Zielplattform (QEMU)
 
@@ -26,7 +26,7 @@ Meilensteine 1-7 sind abgeschlossen. Das System hat einen funktionierenden Kerne
 CPU:    Intel 486, 66 MHz (-cpu 486)
 RAM:    32 MB (-m 32)
 Grafik: Cirrus Logic GD5446 (-vga cirrus)
-Boot:   Floppy 1.44 MB
+Boot:   Floppy 1.44 MB oder HDD (16 MB Image)
 Serial: COM1 auf stdio (-serial stdio)
 Debug:  GDB-Stub auf Port 1234 (-s -S)
 ```
@@ -59,11 +59,14 @@ brew install i686-elf-gdb
 # Konfigurieren
 cmake -B build -DCMAKE_TOOLCHAIN_FILE=cmake/i686-elf-toolchain.cmake
 
-# Bauen (Bootloader + Kernel + Floppy-Image)
+# Bauen (Bootloader + Kernel + Floppy- und HDD-Image)
 cmake --build build
 
-# Starten
+# Starten (Floppy)
 ./scripts/run.sh
+
+# Starten (HDD)
+./scripts/run-hdd.sh
 
 # Starten mit GDB-Stub (wartet auf Debugger-Verbindung)
 ./scripts/debug.sh
@@ -85,17 +88,17 @@ cmake --build build
 ```
 BIOS
   -> boot.asm (Stage 1, 0x7C00, 512 Bytes)
-       A20 aktivieren, Stage 2 von Floppy laden
+       A20 aktivieren, Boot-Drive merken, Stage 2 laden
   -> stage2.asm (Stage 2, 0x10000)
        Kernel laden, GDT aufsetzen, Protected Mode aktivieren
        Kernel nach 0x100000 (1 MB) kopieren
   -> entry.asm (_start, 0x100000)
        Stack einrichten, kernel_main() aufrufen
   -> kernel.c (kernel_main)
-       Serial, VGA, PIC, IDT, PMM, Paging, Ramdisk, Keyboard, Shell
+       Serial, VGA, PIC, IDT, PMM, Paging, Ramdisk, SVGA, Keyboard, Shell
 ```
 
-### Floppy-Layout
+### Disk-Layout (Floppy und HDD identisch)
 
 | Sektor (1-indexed) | Inhalt |
 |---|---|
@@ -134,12 +137,13 @@ rainbow-os/
 │   ├── drivers/
 │   │   ├── vga.c/h         # VGA Textmodus: putchar, write, scroll, cursor
 │   │   ├── serial.c/h      # COM1: init, putchar, write, hex/dec output
-│   │   └── keyboard.c/h    # PS/2 Tastatur: IRQ1, Scancode Set 1, Shift
+│   │   ├── keyboard.c/h    # PS/2 Tastatur: IRQ1, Scancode Set 1, Shift
+│   │   └── svga.c/h        # Cirrus GD5446: 640x480x8bpp, Bank-Switching, Zeichenprimitiven
 │   ├── fs/
 │   │   ├── fat12.c/h       # FAT12 Read-Only Treiber (BPB, FAT-Chain, Verzeichnis)
 │   │   └── ramdisk.c/h     # 64 KB FAT12 Ramdisk (beim Boot formatiert)
 │   ├── shell/
-│   │   └── shell.c/h       # Kommandozeile (help, clear, version, meminfo, ls, cat, reboot)
+│   │   └── shell.c/h       # Kommandozeile (help, clear, version, meminfo, ls, cat, gfx, reboot)
 │   ├── lib/
 │   │   └── string.c/h      # memset, memcpy, strlen, strcmp, strncmp
 │   └── include/
@@ -152,9 +156,11 @@ rainbow-os/
 ├── cmake/
 │   └── i686-elf-toolchain.cmake
 ├── scripts/
-│   ├── run.sh              # QEMU normal starten
+│   ├── run.sh              # QEMU Floppy-Boot
+│   ├── run-hdd.sh          # QEMU HDD-Boot
 │   ├── debug.sh            # QEMU mit GDB-Stub (-s -S)
-│   └── mkimage.sh          # Floppy-Image aus boot+stage2+kernel bauen
+│   ├── mkimage.sh          # Floppy-Image (1.44 MB)
+│   └── mkimage-hdd.sh      # HDD-Image (16 MB)
 └── CMakeLists.txt
 ```
 
@@ -168,11 +174,6 @@ rainbow-os/
 
 4. **Kernel-Groesse:** Aktuell werden 64 Sektoren (32 KB) fuer den Kernel geladen. Bei groesserem Kernel muss `KERNEL_SECTORS` in `stage2.asm` erhoeht und ggf. Multi-Track-Loading implementiert werden (INT 13h kann nicht ueber Track-Grenzen lesen).
 
-## Naechster Meilenstein: M8 SVGA Grafik
+5. **Stage 2 DS-Reihenfolge:** `stage2.asm` muss `DS = CS` setzen *bevor* lokale Variablen (wie `boot_drive`) geschrieben werden, da nach dem Far Jump aus Stage 1 DS noch den alten Wert (0x0000) hat.
 
-Erfordert:
-- **Cirrus GD5446** SVGA-Treiber (MMIO oder VBE)
-- Grafikmodus setzen (z.B. 640x480x8bpp oder 800x600)
-- Pixel zeichnen, Linien, Rechtecke
-- Framebuffer-Zugriff
-- Shell-Kommando zum Umschalten zwischen Text/Grafik
+6. **SVGA Bank-Switching:** Der Cirrus GD5446 nutzt GR9 fuer Bank-Auswahl in 4 KB Einheiten. Fuer 64 KB Banken: `GR9 = bank_nummer * 16`. Der Framebuffer liegt bei 0xA0000 (64 KB Fenster).

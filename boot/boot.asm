@@ -6,8 +6,8 @@
 ;   1. Set up stack and segments
 ;   2. Save boot drive number
 ;   3. Enable A20 line
-;   4. Load Stage 2 from floppy (sectors 1-4)
-;   5. Jump to Stage 2
+;   4. Load Stage 2 from boot drive (sectors 1-4)
+;   5. Pass boot drive in DL, jump to Stage 2
 ; =============================================================================
 
 [BITS 16]
@@ -62,6 +62,9 @@ start:
     xor bx, bx                     ; ES:BX = 0x1000:0x0000 = 0x10000
     int 0x13
     jc disk_error
+
+    ; Pass boot drive to Stage 2 in DL
+    mov dl, [boot_drive]
 
     ; Jump to Stage 2
     jmp STAGE2_LOAD_SEG:0x0000
