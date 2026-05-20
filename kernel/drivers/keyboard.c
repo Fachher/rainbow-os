@@ -36,6 +36,7 @@ static const char scancode_ascii_shift[128] = {
 };
 
 static bool shift_held;
+static volatile bool key_pressed;
 
 static void keyboard_irq_handler(struct isr_frame *frame) {
     (void)frame;
@@ -65,6 +66,7 @@ static void keyboard_irq_handler(struct isr_frame *frame) {
         c = scancode_ascii[scancode];
     }
 
+    key_pressed = true;
     if (c) {
         shell_putchar(c);
     }
@@ -85,4 +87,14 @@ void keyboard_init(void) {
     }
 
     serial_log("PS/2 keyboard initialized (IRQ1)");
+}
+
+void keyboard_wait_any(void) {
+    /* We may be called from inside the keyboard IRQ handler (e.g. gfx command).
+     * The interrupt gate disables IF, and EOI hasn't been sent yet.
+     * Fix both so the PIC can deliver the next keyboard IRQ. */
+    pic_send_eoi(1);
+    key_pressed = false;
+    while (!key_pressed)
+        __asm__ volatile("sti; hlt");
 }

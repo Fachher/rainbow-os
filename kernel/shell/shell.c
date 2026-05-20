@@ -2,10 +2,10 @@
 #include "drivers/vga.h"
 #include "drivers/serial.h"
 #include "lib/string.h"
-#include "include/io.h"
 #include "include/pmm.h"
 #include "fs/fat12.h"
 #include "drivers/svga.h"
+#include "drivers/keyboard.h"
 
 #define CMD_MAX_LEN 78
 #define PROMPT_STR  "> "
@@ -127,13 +127,8 @@ static void shell_execute(const char *cmd) {
         svga_fill_rect(222, 22, 196, 26, 0);
 
         /* Wait for any key to return to text mode */
-        /* The keyboard IRQ will still fire — we just need any keypress */
         serial_write("GFX demo active. Press any key for text mode.\n");
-
-        /* Spin until a key is pressed (simple approach: wait for scancode) */
-        while (!(inb(0x64) & 0x01))
-            __asm__ volatile("hlt");
-        inb(0x60);  /* Consume the scancode */
+        keyboard_wait_any();
 
         svga_set_mode_text();
         vga_init();

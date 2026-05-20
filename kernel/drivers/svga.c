@@ -9,6 +9,9 @@
 /* Current bank cached to avoid redundant switches */
 static uint8_t current_bank = 0xFF;
 
+/* Saved VGA font from plane 2 (256 chars * 32 bytes each) */
+static uint8_t saved_font[8192];
+
 /* ============================================================================
  * VGA register helpers
  * ============================================================================ */
@@ -182,7 +185,48 @@ static void program_regs(uint8_t misc,
     outb(0x3C0, 0x20);
 }
 
+/* Save VGA font from plane 2 before entering graphics mode */
+static void save_font(void) {
+    /* Access plane 2 for reading */
+    vga_write_seq(0x02, 0x04);   /* SR2: write plane 2 */
+    vga_write_seq(0x04, 0x06);   /* SR4: disable chain-4, disable odd/even */
+    vga_write_gc(0x04, 0x02);    /* GR4: read plane 2 */
+    vga_write_gc(0x05, 0x00);    /* GR5: no shift interleave */
+    vga_write_gc(0x06, 0x04);    /* GR6: map at A0000, 64K */
+
+    uint8_t *font_mem = (uint8_t *)0xA0000;
+    memcpy(saved_font, font_mem, sizeof(saved_font));
+
+    /* Restore text mode sequencer/GC settings */
+    vga_write_seq(0x02, 0x03);
+    vga_write_seq(0x04, 0x02);
+    vga_write_gc(0x04, 0x00);
+    vga_write_gc(0x05, 0x10);
+    vga_write_gc(0x06, 0x0E);
+}
+
+/* Restore VGA font to plane 2 after returning to text mode */
+static void restore_font(void) {
+    /* Access plane 2 for writing */
+    vga_write_seq(0x02, 0x04);   /* SR2: write plane 2 */
+    vga_write_seq(0x04, 0x06);   /* SR4: disable chain-4, disable odd/even */
+    vga_write_gc(0x04, 0x02);    /* GR4: read plane 2 */
+    vga_write_gc(0x05, 0x00);    /* GR5: no shift interleave */
+    vga_write_gc(0x06, 0x04);    /* GR6: map at A0000, 64K */
+
+    uint8_t *font_mem = (uint8_t *)0xA0000;
+    memcpy(font_mem, saved_font, sizeof(saved_font));
+
+    /* Restore text mode sequencer/GC settings */
+    vga_write_seq(0x02, 0x03);
+    vga_write_seq(0x04, 0x02);
+    vga_write_gc(0x04, 0x00);
+    vga_write_gc(0x05, 0x10);
+    vga_write_gc(0x06, 0x0E);
+}
+
 void svga_set_mode_gfx(void) {
+    save_font();
     program_regs(MISC_640x480,
                  seq_640x480,  5,
                  crtc_640x480, 25,
@@ -221,6 +265,8 @@ void svga_set_mode_text(void) {
         outb(0x3C9, text_palette[i][1]);
         outb(0x3C9, text_palette[i][2]);
     }
+
+    restore_font();
 
     serial_log("Text mode: 80x25");
 }
