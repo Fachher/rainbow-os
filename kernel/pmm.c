@@ -58,7 +58,7 @@ uint32_t pmm_alloc_frame(void) {
     }
     /* Out of memory */
     serial_write("PMM: OUT OF MEMORY!\n");
-    return 0;
+    return PMM_ALLOC_FAILED;
 }
 
 void pmm_free_frame(uint32_t phys_addr) {

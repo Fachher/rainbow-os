@@ -66,11 +66,7 @@ void kernel_main(void) {
     serial_log("Kernel startup complete");
     serial_write("System: 486/66MHz, 32MB RAM, Cirrus GD5446\n");
 
-    /* Start shell */
+    /* Start shell (polls keyboard ring buffer, never returns) */
     shell_init();
-
-    /* Halt loop - wakes on interrupt (keyboard), then halts again */
-    while (1) {
-        __asm__ volatile("hlt");
-    }
+    shell_run();
 }

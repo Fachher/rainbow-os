@@ -69,7 +69,9 @@ static void add_file(const char *name, const char *ext, const uint8_t *data, uin
     uint32_t data_written = 0;
     uint32_t cluster_size = SECTORS_PER_CLUSTER * SECTOR_SIZE;
 
+    uint16_t max_data_clusters = (TOTAL_SECTORS * SECTOR_SIZE - DATA_OFFSET) / cluster_size;
     while (bytes_left > 0) {
+        if (next_free_cluster - 2 >= max_data_clusters) return;
         uint16_t cur = next_free_cluster++;
         uint32_t offset = DATA_OFFSET + (cur - 2) * cluster_size;
         uint32_t chunk = bytes_left < cluster_size ? bytes_left : cluster_size;

@@ -4,6 +4,6 @@
 #include "include/types.h"
 
 void shell_init(void);
-void shell_putchar(char c);
+void shell_run(void);
 
 #endif

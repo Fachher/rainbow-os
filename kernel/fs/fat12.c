@@ -166,7 +166,9 @@ int fat12_read_file(const char *name, uint8_t *buf, uint32_t buf_size) {
         uint16_t cluster = dir[i].first_cluster;
         uint32_t cluster_bytes = sectors_per_cluster * bytes_per_sector;
 
-        while (read < to_read && cluster >= 2 && cluster < 0xFF8) {
+        uint32_t max_clusters = (total_sectors * bytes_per_sector - data_start_offset) / cluster_bytes;
+        uint32_t iterations = 0;
+        while (read < to_read && cluster >= 2 && cluster < 0xFF8 && iterations++ < max_clusters) {
             uint32_t offset = cluster_to_offset(cluster);
             uint32_t chunk = cluster_bytes;
             if (read + chunk > to_read) chunk = to_read - read;

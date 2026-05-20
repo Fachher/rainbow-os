@@ -6,6 +6,7 @@
 #define PAGE_SIZE       4096
 #define TOTAL_MEMORY    (32 * 1024 * 1024)  /* 32 MB */
 #define TOTAL_FRAMES    (TOTAL_MEMORY / PAGE_SIZE)
+#define PMM_ALLOC_FAILED 0xFFFFFFFF
 
 void     pmm_init(uint32_t kernel_end);
 uint32_t pmm_alloc_frame(void);

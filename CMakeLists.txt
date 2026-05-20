@@ -42,6 +42,7 @@ set_target_properties(kernel.elf PROPERTIES
 # --- kernel.bin from kernel.elf ---
 add_custom_command(TARGET kernel.elf POST_BUILD
     COMMAND i686-elf-objcopy -O binary $<TARGET_FILE:kernel.elf> ${CMAKE_BINARY_DIR}/kernel.bin
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/check-kernel-size.sh ${CMAKE_BINARY_DIR}/kernel.bin 32768
     COMMENT "Creating kernel.bin"
 )
 

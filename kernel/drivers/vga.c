@@ -2,7 +2,7 @@
 #include "include/io.h"
 #include "lib/string.h"
 
-static uint16_t *vga_buffer = (uint16_t *)VGA_BUFFER_ADDR;
+static volatile uint16_t *vga_buffer = (volatile uint16_t *)VGA_BUFFER_ADDR;
 static uint16_t cursor_row = 0;
 static uint16_t cursor_col = 0;
 static uint8_t  current_color = 0;
@@ -27,9 +27,9 @@ static void vga_scroll(void) {
     if (cursor_row < VGA_HEIGHT) return;
 
     /* Move all rows up by one */
-    memcpy(vga_buffer,
-           vga_buffer + VGA_WIDTH,
-           (VGA_HEIGHT - 1) * VGA_WIDTH * 2);
+    for (int i = 0; i < (VGA_HEIGHT - 1) * VGA_WIDTH; i++) {
+        vga_buffer[i] = vga_buffer[i + VGA_WIDTH];
+    }
 
     /* Clear last row */
     uint16_t blank = vga_entry(' ', current_color);

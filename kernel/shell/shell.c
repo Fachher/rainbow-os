@@ -90,6 +90,11 @@ static void shell_execute(const char *cmd) {
                     if (file_buf[i] == '\r') continue;
                     vga_putchar(file_buf[i]);
                 }
+                if (bytes == (int)(sizeof(file_buf) - 1)) {
+                    vga_set_color(VGA_YELLOW, VGA_BLACK);
+                    vga_write("\n[truncated at 4095 bytes]\n");
+                    vga_set_color(VGA_WHITE, VGA_BLACK);
+                }
             }
         }
     } else if (strcmp(cmd, "gfx") == 0) {
@@ -157,7 +162,7 @@ void shell_init(void) {
     shell_prompt();
 }
 
-void shell_putchar(char c) {
+static void shell_process_char(char c) {
     if (c == '\n') {
         vga_putchar('\n');
         serial_putchar('\n');
@@ -180,5 +185,12 @@ void shell_putchar(char c) {
         cmd_buf[cmd_len++] = c;
         vga_putchar(c);
         serial_putchar(c);
+    }
+}
+
+void shell_run(void) {
+    while (1) {
+        char c = keyboard_getchar();
+        shell_process_char(c);
     }
 }

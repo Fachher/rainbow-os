@@ -9,8 +9,8 @@
 /* Current bank cached to avoid redundant switches */
 static uint8_t current_bank = 0xFF;
 
-/* Saved VGA font from plane 2 (256 chars * 32 bytes each) */
-static uint8_t saved_font[8192];
+/* Saved VGA font from plane 2 (256 chars * 16 bytes each) */
+static uint8_t saved_font[4096];
 
 /* ============================================================================
  * VGA register helpers

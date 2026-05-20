@@ -3,10 +3,15 @@
 #include "include/idt.h"
 #include "include/pic.h"
 #include "include/io.h"
-#include "shell/shell.h"
 
 #define KBD_DATA_PORT   0x60
 #define KBD_STATUS_PORT 0x64
+
+/* Ring buffer for decoupling IRQ handler from shell consumer */
+#define KBD_BUF_SIZE 64
+static char kbd_ring[KBD_BUF_SIZE];
+static volatile uint8_t kbd_head;
+static volatile uint8_t kbd_tail;
 
 /* Scancode Set 1 -> ASCII (US layout, lowercase only for now) */
 static const char scancode_ascii[128] = {
@@ -68,12 +73,18 @@ static void keyboard_irq_handler(struct isr_frame *frame) {
 
     key_pressed = true;
     if (c) {
-        shell_putchar(c);
+        uint8_t next = (kbd_head + 1) % KBD_BUF_SIZE;
+        if (next != kbd_tail) {
+            kbd_ring[kbd_head] = c;
+            kbd_head = next;
+        }
     }
 }
 
 void keyboard_init(void) {
     shift_held = false;
+    kbd_head = 0;
+    kbd_tail = 0;
 
     /* Register IRQ1 handler (ISR 33) */
     register_interrupt_handler(33, keyboard_irq_handler);
@@ -87,6 +98,18 @@ void keyboard_init(void) {
     }
 
     serial_log("PS/2 keyboard initialized (IRQ1)");
+}
+
+bool keyboard_has_key(void) {
+    return kbd_head != kbd_tail;
+}
+
+char keyboard_getchar(void) {
+    while (kbd_head == kbd_tail)
+        __asm__ volatile("sti; hlt");
+    char c = kbd_ring[kbd_tail];
+    kbd_tail = (kbd_tail + 1) % KBD_BUF_SIZE;
+    return c;
 }
 
 void keyboard_wait_any(void) {
