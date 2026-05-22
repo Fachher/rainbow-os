@@ -32,5 +32,9 @@ void vga_putchar(char c);
 void vga_write(const char *str);
 void vga_set_color(uint8_t fg, uint8_t bg);
 void vga_write_dec(uint32_t val);
+void vga_set_cursor(uint8_t row, uint8_t col);
+void vga_putchar_at(uint8_t row, uint8_t col, char c, uint8_t fg, uint8_t bg);
+uint8_t vga_get_rows(void);
+uint8_t vga_get_cols(void);
 
 #endif

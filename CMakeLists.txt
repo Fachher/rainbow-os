@@ -21,6 +21,9 @@ set(KERNEL_SOURCES
     kernel/fs/ramdisk.c
     kernel/shell/shell.c
     kernel/lib/string.c
+    kernel/editor/buffer.c
+    kernel/editor/view.c
+    kernel/editor/editor.c
 )
 
 add_executable(kernel.elf ${KERNEL_SOURCES})
@@ -32,6 +35,7 @@ target_include_directories(kernel.elf PRIVATE
     ${CMAKE_SOURCE_DIR}/kernel/fs
     ${CMAKE_SOURCE_DIR}/kernel/shell
     ${CMAKE_SOURCE_DIR}/kernel/lib
+    ${CMAKE_SOURCE_DIR}/kernel/editor
 )
 
 set_target_properties(kernel.elf PROPERTIES
@@ -42,7 +46,7 @@ set_target_properties(kernel.elf PROPERTIES
 # --- kernel.bin from kernel.elf ---
 add_custom_command(TARGET kernel.elf POST_BUILD
     COMMAND i686-elf-objcopy -O binary $<TARGET_FILE:kernel.elf> ${CMAKE_BINARY_DIR}/kernel.bin
-    COMMAND ${CMAKE_SOURCE_DIR}/scripts/check-kernel-size.sh ${CMAKE_BINARY_DIR}/kernel.bin 32768
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/check-kernel-size.sh ${CMAKE_BINARY_DIR}/kernel.bin 65536
     COMMENT "Creating kernel.bin"
 )
 

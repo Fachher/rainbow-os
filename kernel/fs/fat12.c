@@ -182,3 +182,153 @@ int fat12_read_file(const char *name, uint8_t *buf, uint32_t buf_size) {
 
     return -1;  /* Not found */
 }
+
+/* Write a 12-bit FAT entry */
+static void fat12_write_fat(uint16_t cluster, uint16_t value) {
+    uint32_t fat_offset = reserved_sectors * bytes_per_sector;
+    uint32_t entry_offset = cluster + (cluster / 2);
+    uint8_t *p = vol + fat_offset + entry_offset;
+
+    if (cluster & 1) {
+        p[0] = (p[0] & 0x0F) | ((value & 0x0F) << 4);
+        p[1] = (value >> 4) & 0xFF;
+    } else {
+        p[0] = value & 0xFF;
+        p[1] = (p[1] & 0xF0) | ((value >> 8) & 0x0F);
+    }
+}
+
+/* Free an entire cluster chain */
+static void fat12_free_chain(uint16_t start) {
+    uint32_t cluster_bytes = sectors_per_cluster * bytes_per_sector;
+    uint32_t max_clusters = (total_sectors * bytes_per_sector - data_start_offset) / cluster_bytes;
+    uint32_t iterations = 0;
+    uint16_t cluster = start;
+
+    while (cluster >= 2 && cluster < 0xFF8 && iterations++ < max_clusters) {
+        uint16_t next = fat12_read_fat(cluster);
+        fat12_write_fat(cluster, 0x000);
+        cluster = next;
+    }
+}
+
+/* Find first free cluster. Returns 0 if none available. */
+static uint16_t fat12_alloc_cluster(void) {
+    uint32_t cluster_bytes = sectors_per_cluster * bytes_per_sector;
+    uint32_t max_clusters = (total_sectors * bytes_per_sector - data_start_offset) / cluster_bytes + 2;
+
+    for (uint16_t c = 2; c < max_clusters; c++) {
+        if (fat12_read_fat(c) == 0x000) return c;
+    }
+    return 0;  /* disk full */
+}
+
+int fat12_write_file(const char *name, const uint8_t *data, uint32_t size) {
+    uint8_t name83[11];
+    name_to_83(name, name83);
+
+    struct fat12_raw_dirent *dir = (struct fat12_raw_dirent *)(vol + root_dir_offset);
+    uint32_t cluster_bytes = sectors_per_cluster * bytes_per_sector;
+
+    /* Check if file already exists */
+    int existing_idx = -1;
+    for (uint16_t i = 0; i < root_entry_count; i++) {
+        if (dir[i].name[0] == 0x00) break;
+        if (dir[i].name[0] == 0xE5) continue;
+        if (dir[i].attr & 0x08) continue;
+        if (dir[i].attr & 0x10) continue;
+
+        bool match = true;
+        for (int j = 0; j < 11; j++) {
+            if (dir[i].name[j] != name83[j]) { match = false; break; }
+        }
+        if (match) { existing_idx = (int)i; break; }
+    }
+
+    /* If existing, free its cluster chain */
+    if (existing_idx >= 0) {
+        uint16_t old_cluster = dir[existing_idx].first_cluster;
+        if (old_cluster >= 2) fat12_free_chain(old_cluster);
+    }
+
+    /* Allocate clusters for new content */
+    uint16_t first_cluster = 0;
+    uint16_t prev_cluster = 0;
+    uint32_t written = 0;
+
+    while (written < size) {
+        uint16_t cluster = fat12_alloc_cluster();
+        if (cluster == 0) return -1;  /* disk full */
+
+        if (first_cluster == 0) first_cluster = cluster;
+        if (prev_cluster != 0) fat12_write_fat(prev_cluster, cluster);
+
+        /* Write data to cluster */
+        uint32_t offset = cluster_to_offset(cluster);
+        uint32_t chunk = cluster_bytes;
+        if (written + chunk > size) chunk = size - written;
+        memcpy(vol + offset, data + written, chunk);
+        written += chunk;
+
+        fat12_write_fat(cluster, 0xFFF);  /* mark as end for now */
+        prev_cluster = cluster;
+    }
+
+    /* Handle empty file (size == 0) */
+    if (size == 0) first_cluster = 0;
+
+    /* Update or create directory entry */
+    struct fat12_raw_dirent *entry;
+    if (existing_idx >= 0) {
+        entry = &dir[existing_idx];
+    } else {
+        /* Find free directory slot */
+        int free_idx = -1;
+        for (uint16_t i = 0; i < root_entry_count; i++) {
+            if (dir[i].name[0] == 0x00 || dir[i].name[0] == 0xE5) {
+                free_idx = (int)i;
+                break;
+            }
+        }
+        if (free_idx < 0) return -1;  /* directory full */
+        entry = &dir[free_idx];
+        memset(entry, 0, 32);
+        memcpy(entry->name, name83, 11);
+        entry->attr = 0x20;  /* archive */
+    }
+
+    entry->first_cluster = first_cluster;
+    entry->size = size;
+
+    return 0;
+}
+
+int fat12_delete_file(const char *name) {
+    uint8_t name83[11];
+    name_to_83(name, name83);
+
+    struct fat12_raw_dirent *dir = (struct fat12_raw_dirent *)(vol + root_dir_offset);
+
+    for (uint16_t i = 0; i < root_entry_count; i++) {
+        if (dir[i].name[0] == 0x00) break;
+        if (dir[i].name[0] == 0xE5) continue;
+        if (dir[i].attr & 0x08) continue;
+        if (dir[i].attr & 0x10) continue;
+
+        bool match = true;
+        for (int j = 0; j < 11; j++) {
+            if (dir[i].name[j] != name83[j]) { match = false; break; }
+        }
+        if (!match) continue;
+
+        /* Free clusters */
+        if (dir[i].first_cluster >= 2)
+            fat12_free_chain(dir[i].first_cluster);
+
+        /* Mark entry as deleted */
+        dir[i].name[0] = 0xE5;
+        return 0;
+    }
+
+    return -1;  /* not found */
+}

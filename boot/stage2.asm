@@ -16,7 +16,7 @@
 KERNEL_TMP_SEG      equ 0x2000         ; Temp buffer at 0x2000:0x0000 = 0x20000
 KERNEL_LOAD_ADDR    equ 0x100000       ; Final kernel address: 1 MB
 KERNEL_START_SECTOR equ 6              ; Kernel starts at sector 6 (1-indexed)
-KERNEL_SECTORS      equ 64             ; 64 sectors = 32 KB max kernel size
+KERNEL_SECTORS      equ 128            ; 128 sectors = 64 KB max kernel size
 stage2_start:
     ; Set up segments first (we're at 0x1000:0x0000)
     mov ax, cs

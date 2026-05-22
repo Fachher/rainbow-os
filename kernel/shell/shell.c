@@ -6,6 +6,7 @@
 #include "fs/fat12.h"
 #include "drivers/svga.h"
 #include "drivers/keyboard.h"
+#include "editor/editor.h"
 
 #define CMD_MAX_LEN 78
 #define PROMPT_STR  "> "
@@ -30,6 +31,7 @@ static void shell_execute(const char *cmd) {
         vga_write("  meminfo  - Show memory usage\n");
         vga_write("  ls       - List files\n");
         vga_write("  cat FILE - Show file contents\n");
+        vga_write("  edit     - Text editor (vim-like)\n");
         vga_write("  gfx      - Graphics demo (640x480)\n");
         vga_write("  reboot   - Reboot the system\n");
     } else if (strcmp(cmd, "clear") == 0) {
@@ -141,6 +143,14 @@ static void shell_execute(const char *cmd) {
         vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
         vga_write("[OK] Returned to text mode\n");
         vga_set_color(VGA_WHITE, VGA_BLACK);
+    } else if (strcmp(cmd, "edit") == 0) {
+        editor_open((const char *)0);
+        shell_prompt();
+    } else if (strncmp(cmd, "edit ", 5) == 0) {
+        const char *fname = cmd + 5;
+        while (*fname == ' ') fname++;
+        editor_open(fname);
+        shell_prompt();
     } else if (strcmp(cmd, "reboot") == 0) {
         vga_write("Rebooting...\n");
         serial_write("Rebooting...\n");
@@ -162,7 +172,7 @@ void shell_init(void) {
     shell_prompt();
 }
 
-static void shell_process_char(char c) {
+static void shell_process_char(int c) {
     if (c == '\n') {
         vga_putchar('\n');
         serial_putchar('\n');
@@ -181,16 +191,16 @@ static void shell_process_char(char c) {
         }
     } else if (c == '\t') {
         /* Ignore tabs for now */
-    } else if (c >= ' ' && cmd_len < CMD_MAX_LEN) {
-        cmd_buf[cmd_len++] = c;
-        vga_putchar(c);
-        serial_putchar(c);
+    } else if (c >= ' ' && c < 127 && cmd_len < CMD_MAX_LEN) {
+        cmd_buf[cmd_len++] = (char)c;
+        vga_putchar((char)c);
+        serial_putchar((char)c);
     }
 }
 
 void shell_run(void) {
     while (1) {
-        char c = keyboard_getchar();
+        int c = keyboard_getchar();
         shell_process_char(c);
     }
 }

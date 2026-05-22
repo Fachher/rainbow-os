@@ -24,4 +24,10 @@ int fat12_list_root(struct fat12_dirent *buf, int max_entries);
    Returns bytes read, or -1 if not found. */
 int fat12_read_file(const char *name, uint8_t *buf, uint32_t buf_size);
 
+/* Write/overwrite file. Returns 0 on success, -1 on error. */
+int fat12_write_file(const char *name, const uint8_t *data, uint32_t size);
+
+/* Delete file. Returns 0 on success, -1 if not found. */
+int fat12_delete_file(const char *name);
+
 #endif

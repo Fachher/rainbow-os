@@ -110,3 +110,25 @@ void vga_write_dec(uint32_t val) {
         vga_putchar(buf[--i]);
     }
 }
+
+void vga_set_cursor(uint8_t row, uint8_t col) {
+    if (row >= VGA_HEIGHT) row = VGA_HEIGHT - 1;
+    if (col >= VGA_WIDTH) col = VGA_WIDTH - 1;
+    cursor_row = row;
+    cursor_col = col;
+    vga_update_cursor();
+}
+
+void vga_putchar_at(uint8_t row, uint8_t col, char c, uint8_t fg, uint8_t bg) {
+    if (row >= VGA_HEIGHT || col >= VGA_WIDTH) return;
+    uint8_t color = vga_color(fg, bg);
+    vga_buffer[row * VGA_WIDTH + col] = vga_entry(c, color);
+}
+
+uint8_t vga_get_rows(void) {
+    return VGA_HEIGHT;
+}
+
+uint8_t vga_get_cols(void) {
+    return VGA_WIDTH;
+}

@@ -5,6 +5,6 @@ MAX_SIZE="$2"
 
 SIZE=$(wc -c < "$KERNEL_BIN" | tr -d ' ')
 if [ "$SIZE" -gt "$MAX_SIZE" ]; then
-    echo "ERROR: kernel.bin is $SIZE bytes, exceeds $MAX_SIZE (KERNEL_SECTORS=64). Increase KERNEL_SECTORS in stage2.asm." >&2
+    echo "ERROR: kernel.bin is $SIZE bytes, exceeds $MAX_SIZE (KERNEL_SECTORS=128). Increase KERNEL_SECTORS in stage2.asm." >&2
     exit 1
 fi
