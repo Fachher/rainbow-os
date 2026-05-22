@@ -7,6 +7,7 @@
 #include "drivers/svga.h"
 #include "drivers/keyboard.h"
 #include "editor/editor.h"
+#include "basic/basic.h"
 
 #define CMD_MAX_LEN 78
 #define PROMPT_STR  "> "
@@ -32,6 +33,7 @@ static void shell_execute(const char *cmd) {
         vga_write("  ls       - List files\n");
         vga_write("  cat FILE - Show file contents\n");
         vga_write("  edit     - Text editor (vim-like)\n");
+        vga_write("  basic    - BASIC interpreter\n");
         vga_write("  gfx      - Graphics demo (640x480)\n");
         vga_write("  reboot   - Reboot the system\n");
     } else if (strcmp(cmd, "clear") == 0) {
@@ -150,6 +152,14 @@ static void shell_execute(const char *cmd) {
         const char *fname = cmd + 5;
         while (*fname == ' ') fname++;
         editor_open(fname);
+        shell_prompt();
+    } else if (strcmp(cmd, "basic") == 0) {
+        basic_run();
+        shell_prompt();
+    } else if (strncmp(cmd, "basic ", 6) == 0) {
+        const char *fname = cmd + 6;
+        while (*fname == ' ') fname++;
+        basic_load_and_run(fname);
         shell_prompt();
     } else if (strcmp(cmd, "reboot") == 0) {
         vga_write("Rebooting...\n");

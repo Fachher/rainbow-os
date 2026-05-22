@@ -24,6 +24,12 @@ set(KERNEL_SOURCES
     kernel/editor/buffer.c
     kernel/editor/view.c
     kernel/editor/editor.c
+    kernel/basic/program.c
+    kernel/basic/tokenizer.c
+    kernel/basic/vars.c
+    kernel/basic/expr.c
+    kernel/basic/exec.c
+    kernel/basic/basic.c
 )
 
 add_executable(kernel.elf ${KERNEL_SOURCES})
@@ -36,6 +42,7 @@ target_include_directories(kernel.elf PRIVATE
     ${CMAKE_SOURCE_DIR}/kernel/shell
     ${CMAKE_SOURCE_DIR}/kernel/lib
     ${CMAKE_SOURCE_DIR}/kernel/editor
+    ${CMAKE_SOURCE_DIR}/kernel/basic
 )
 
 set_target_properties(kernel.elf PROPERTIES
