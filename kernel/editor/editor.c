@@ -18,6 +18,10 @@ static char cmd_buf[80];
 static uint8_t cmd_len;
 static bool running;
 static bool awaiting_g;  /* for gg command */
+static bool awaiting_d;  /* for dd command */
+static bool awaiting_y;  /* for yy command */
+static char yank_buf[256];
+static uint32_t yank_len;
 
 static const char *mode_string(void) {
     switch (mode) {
@@ -57,6 +61,30 @@ static void move_vertical(int delta) {
     move_to_line_col((uint32_t)new_line, cur_col);
 }
 
+/* Yank current line into yank_buf */
+static void yank_current_line(void) {
+    uint32_t line = buf_cursor_line();
+    uint32_t start = buf_line_start(line);
+    uint32_t len = buf_line_length(line);
+    if (len > sizeof(yank_buf) - 1) len = sizeof(yank_buf) - 1;
+    for (uint32_t i = 0; i < len; i++)
+        yank_buf[i] = buf_char_at(start + i);
+    yank_len = len;
+}
+
+/* Delete current line (assumes cursor anywhere on line) */
+static void delete_current_line(void) {
+    uint32_t line = buf_cursor_line();
+    uint32_t start = buf_line_start(line);
+    uint32_t len = buf_line_length(line);
+    buf_move_to(start);
+    uint32_t to_delete = len;
+    if (start + len < buf_length()) to_delete++;  /* include \n */
+    for (uint32_t i = 0; i < to_delete; i++) buf_delete_fwd();
+    sync_cursor();
+    modified = true;
+}
+
 /* --- Normal Mode --- */
 
 static void handle_normal(int key) {
@@ -65,6 +93,21 @@ static void handle_normal(int key) {
         if (key == 'g') {
             /* gg: go to first line */
             move_to_line_col(0, 0);
+        }
+        return;
+    }
+    if (awaiting_d) {
+        awaiting_d = false;
+        if (key == 'd') {
+            yank_current_line();
+            delete_current_line();
+        }
+        return;
+    }
+    if (awaiting_y) {
+        awaiting_y = false;
+        if (key == 'y') {
+            yank_current_line();
         }
         return;
     }
@@ -145,16 +188,22 @@ static void handle_normal(int key) {
             sync_cursor();
             modified = true;
             break;
-        case 'd': {
-            /* dd: delete line — simplified: always immediate */
+        case 'd':
+            awaiting_d = true;
+            break;
+        case 'y':
+            awaiting_y = true;
+            break;
+        case 'p': {
+            if (yank_len == 0) break;
+            /* Paste below current line */
             uint32_t line = buf_cursor_line();
             uint32_t start = buf_line_start(line);
             uint32_t len = buf_line_length(line);
-            buf_move_to(start);
-            /* Delete line content + newline if not last line */
-            uint32_t to_delete = len;
-            if (start + len < buf_length()) to_delete++;  /* include \n */
-            for (uint32_t i = 0; i < to_delete; i++) buf_delete_fwd();
+            buf_move_to(start + len);
+            buf_insert('\n');
+            for (uint32_t i = 0; i < yank_len; i++)
+                buf_insert(yank_buf[i]);
             sync_cursor();
             modified = true;
             break;
@@ -337,6 +386,9 @@ void editor_open(const char *fname) {
     cmd_len = 0;
     running = true;
     awaiting_g = false;
+    awaiting_d = false;
+    awaiting_y = false;
+    yank_len = 0;
 
     /* Set filename */
     if (fname) {
