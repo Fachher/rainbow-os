@@ -181,8 +181,19 @@ static void parse_primary_expr(void) {
         }
     } else if (tok == TOK_LPAREN) {
         lex_next();
-        parse_expr();
-        expect(TOK_RPAREN);
+        /* Check for type cast: (int), (char *), (void *), etc. */
+        int next = lex_peek();
+        if (next == TOK_INT || next == TOK_CHAR || next == TOK_VOID) {
+            /* Consume type and optional pointer stars */
+            lex_next();
+            while (lex_peek() == TOK_STAR) lex_next();
+            expect(TOK_RPAREN);
+            /* Cast is a no-op (all types are 32-bit), parse the casted expr */
+            parse_unary_expr();
+        } else {
+            parse_expr();
+            expect(TOK_RPAREN);
+        }
     } else {
         error("expected expression");
         lex_next();
