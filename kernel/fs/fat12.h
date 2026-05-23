@@ -5,7 +5,7 @@
 
 #define FAT12_FILENAME_LEN  8
 #define FAT12_EXT_LEN       3
-#define FAT12_MAX_FILES     16
+#define FAT12_MAX_FILES     32
 
 /* Directory entry as returned by fat12_list_root */
 struct fat12_dirent {

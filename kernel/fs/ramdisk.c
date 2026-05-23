@@ -4,23 +4,23 @@
 #include "drivers/serial.h"
 
 /*
- * 64 KB FAT12 ramdisk layout:
+ * 256 KB FAT12 ramdisk layout:
  *   Sector size:        512 bytes
  *   Sectors/cluster:    1
  *   Reserved sectors:   1  (BPB at sector 0)
  *   Number of FATs:     1
- *   Sectors per FAT:    1  (sector 1)
- *   Root dir entries:   16 (sector 2, 1 sector = 512 / 32 = 16 entries)
- *   Data start:         sector 3  (cluster 2 = sector 3)
- *   Total sectors:      128
+ *   Sectors per FAT:    2  (sectors 1-2)
+ *   Root dir entries:   32 (sectors 3-4, 2 sectors = 1024 / 32 = 32 entries)
+ *   Data start:         sector 5  (cluster 2 = sector 5)
+ *   Total sectors:      512
  */
 
 #define SECTOR_SIZE         512
 #define TOTAL_SECTORS       (RAMDISK_SIZE / SECTOR_SIZE)
 #define RESERVED_SECTORS    1
 #define NUM_FATS            1
-#define SECTORS_PER_FAT     1
-#define ROOT_DIR_ENTRIES    16
+#define SECTORS_PER_FAT     2
+#define ROOT_DIR_ENTRIES    32
 #define SECTORS_PER_CLUSTER 1
 
 #define FAT_OFFSET          (RESERVED_SECTORS * SECTOR_SIZE)
@@ -167,12 +167,42 @@ void ramdisk_init(void) {
         "  Indigo\r\n"
         "  Violet\r\n";
 
+    /* C runtime header for user programs */
+    static const char crt0_h[] =
+        "/* crt0.h - Rainbow-OS C runtime */\n"
+        "#define SYSCALL_TABLE 0x1F0000\n"
+        "\n"
+        "void putchar(int c) {\n"
+        "    int *table;\n"
+        "    table = (int *)SYSCALL_TABLE;\n"
+        "    int fn;\n"
+        "    fn = table[0];\n"
+        "    /* Call via inline pointer call */\n"
+        "    int *fptr;\n"
+        "    fptr = (int *)fn;\n"
+        "    /* We use peek/poke style: write char to VGA directly */\n"
+        "}\n"
+        "\n"
+        "void puts(char *s) {\n"
+        "    while (*s) {\n"
+        "        putchar(*s);\n"
+        "        s = s + 1;\n"
+        "    }\n"
+        "}\n";
+
+    static const char hello_c[] =
+        "int main() {\n"
+        "    return 42;\n"
+        "}\n";
+
     add_file("readme",  "txt", (const uint8_t *)readme,  strlen(readme));
     add_file("hello",   "txt", (const uint8_t *)hello,   strlen(hello));
     add_file("colors",  "txt", (const uint8_t *)colors,  strlen(colors));
+    add_file("crt0",    "h",   (const uint8_t *)crt0_h,  strlen(crt0_h));
+    add_file("hello",   "c",   (const uint8_t *)hello_c, strlen(hello_c));
 
     /* Initialize FAT12 driver with this volume */
     fat12_init(ramdisk, RAMDISK_SIZE);
 
-    serial_log("FAT12 ramdisk ready (64 KB, 3 files)");
+    serial_log("FAT12 ramdisk ready (256 KB, 5 files)");
 }

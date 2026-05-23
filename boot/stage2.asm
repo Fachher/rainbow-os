@@ -16,7 +16,7 @@
 KERNEL_TMP_SEG      equ 0x2000         ; Temp buffer at 0x2000:0x0000 = 0x20000
 KERNEL_LOAD_ADDR    equ 0x100000       ; Final kernel address: 1 MB
 KERNEL_START_SECTOR equ 6              ; Kernel starts at sector 6 (1-indexed)
-KERNEL_SECTORS      equ 128            ; 128 sectors = 64 KB max kernel size
+KERNEL_SECTORS      equ 256            ; 256 sectors = 128 KB max kernel size
 stage2_start:
     ; Set up segments first (we're at 0x1000:0x0000)
     mov ax, cs
@@ -40,12 +40,14 @@ stage2_start:
     jc .use_default_geo               ; If query fails, assume floppy defaults
     and cl, 0x3F                       ; CL bits 0-5 = max sector number
     mov [spt], cl
+    mov [max_head], dh                 ; DH = max head number (0-based)
     jmp .geo_done
 .use_default_geo:
     mov byte [spt], 18                 ; Default: 1.44 MB floppy
+    mov byte [max_head], 1             ; Default: 2 heads (0-indexed max = 1)
 .geo_done:
 
-    ; Load kernel into temp buffer at 0x20000 (multi-track safe)
+    ; Load kernel into temp buffer at 0x20000 (multi-track safe, 64K-crossing safe)
     mov ax, KERNEL_TMP_SEG
     mov es, ax
     xor bx, bx                         ; ES:BX = 0x2000:0x0000
@@ -59,41 +61,73 @@ stage2_start:
     ; Calculate how many sectors remain on this track
     movzx ax, byte [cur_sector]
     movzx cx, byte [spt]
-    inc cx                              ; CX = max_sector + 1
+    inc cx                              ; CX = spt + 1
     sub cx, ax                          ; CX = sectors left on this track
     cmp cx, [sectors_left]
-    jbe .clamp_ok
-    mov cx, [sectors_left]              ; Don't read more than needed
-.clamp_ok:
-    ; CX = number of sectors to read this iteration
+    jbe .clamp_total
+    mov cx, [sectors_left]
+.clamp_total:
+    ; Clamp to avoid crossing 64 KB segment boundary
+    xor ax, ax
+    sub ax, bx                          ; AX = bytes left in segment (0 means 64K)
+    jz .seg_ok                          ; BX=0: full segment, no clamp needed
+    shr ax, 9                           ; AX = sectors left in segment
+    cmp cx, ax
+    jbe .seg_ok
+    mov cx, ax
+.seg_ok:
+    ; Save count before INT 13h clobbers registers
+    mov [read_count], cl
+
     mov al, cl                          ; AL = sector count
     mov ah, 0x02                        ; BIOS read sectors
     mov ch, [cur_cylinder]              ; Cylinder
     mov cl, [cur_sector]                ; Start sector (1-indexed)
     mov dh, [cur_head]                  ; Head
-    mov dl, [boot_drive]                ; Boot drive
+    mov dl, [boot_drive]                ; Drive
     int 0x13
     jc .disk_error
 
-    ; Advance buffer pointer: AL sectors * 512 bytes
+    ; Save sectors actually read before advancing buffer
+    mov [read_count], al
+
+    ; Advance buffer pointer
     movzx cx, al
     shl cx, 9                           ; CX = bytes read
     add bx, cx                          ; Advance BX
+    jnc .no_seg_wrap
+    mov ax, es                          ; BX wrapped: advance ES by 64 KB
+    add ax, 0x1000
+    mov es, ax
+.no_seg_wrap:
 
-    ; Subtract sectors read from total
-    movzx cx, al
+    ; Subtract sectors read
+    movzx cx, byte [read_count]
     sub [sectors_left], cx
     cmp word [sectors_left], 0
     je .read_done
 
-    ; Advance to next track: sector resets to 1, head toggles, cylinder increments
+    ; Advance position: cur_sector += read_count
+    movzx ax, byte [cur_sector]
+    movzx cx, byte [read_count]
+    add ax, cx
+    movzx cx, byte [spt]
+    inc cx                              ; CX = spt + 1 (first invalid sector)
+    cmp ax, cx
+    jb .same_track
+    ; Crossed track boundary
     mov byte [cur_sector], 1
     mov al, [cur_head]
-    xor al, 1                           ; Toggle head (0->1, 1->0)
+    inc al
+    cmp al, [max_head]
+    jbe .next_head
+    xor al, al                          ; Wrapped past max head, advance cylinder
+    inc word [cur_cylinder]
+.next_head:
     mov [cur_head], al
-    test al, al
-    jnz .read_loop                      ; If head is now 1, same cylinder
-    inc word [cur_cylinder]             ; Head wrapped to 0: next cylinder
+    jmp .read_loop
+.same_track:
+    mov [cur_sector], al
     jmp .read_loop
 
 .read_done:
@@ -151,7 +185,9 @@ spt:            db 18                   ; Sectors per track (queried from BIOS)
 sectors_left:   dw 0
 cur_sector:     db 0
 cur_head:       db 0
+max_head:       db 1                   ; Max head number (queried from BIOS)
 cur_cylinder:   dw 0
+read_count:     db 0
 
 ; =============================================================================
 ; GDT - Global Descriptor Table (Flat Model)

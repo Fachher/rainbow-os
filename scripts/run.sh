@@ -6,7 +6,7 @@ qemu-system-i386 \
     -cpu 486 \
     -m 32 \
     -vga cirrus \
-    -drive file="$BUILD_DIR/rainbow-os.img",format=raw,if=floppy \
+    -drive file="$BUILD_DIR/rainbow-os-hdd.img",format=raw,if=ide \
     -serial stdio \
     -no-shutdown \
     -d guest_errors

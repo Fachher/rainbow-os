@@ -3,7 +3,7 @@
 
 #include "include/types.h"
 
-#define RAMDISK_SIZE    (64 * 1024)     /* 64 KB */
+#define RAMDISK_SIZE    (256 * 1024)    /* 256 KB */
 
 void ramdisk_init(void);
 

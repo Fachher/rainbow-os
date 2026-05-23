@@ -4,10 +4,13 @@
 #include "lib/string.h"
 #include "include/pmm.h"
 #include "fs/fat12.h"
+#include "fs/diskfs.h"
 #include "drivers/svga.h"
 #include "drivers/keyboard.h"
 #include "editor/editor.h"
 #include "basic/basic.h"
+#include "cc/cc.h"
+#include "cc/runtime.h"
 
 #define CMD_MAX_LEN 78
 #define PROMPT_STR  "> "
@@ -26,16 +29,21 @@ static void shell_execute(const char *cmd) {
         /* Empty command */
     } else if (strcmp(cmd, "help") == 0) {
         vga_write("Available commands:\n");
-        vga_write("  help     - Show this help\n");
-        vga_write("  clear    - Clear the screen\n");
-        vga_write("  version  - Show system info\n");
-        vga_write("  meminfo  - Show memory usage\n");
-        vga_write("  ls       - List files\n");
-        vga_write("  cat FILE - Show file contents\n");
-        vga_write("  edit     - Text editor (vim-like)\n");
-        vga_write("  basic    - BASIC interpreter\n");
-        vga_write("  gfx      - Graphics demo (640x480)\n");
-        vga_write("  reboot   - Reboot the system\n");
+        vga_write("  help      - Show this help\n");
+        vga_write("  clear     - Clear the screen\n");
+        vga_write("  version   - Show system info\n");
+        vga_write("  meminfo   - Show memory usage\n");
+        vga_write("  ls        - List files\n");
+        vga_write("  cat FILE  - Show file contents\n");
+        vga_write("  edit      - Text editor (vim-like)\n");
+        vga_write("  rm FILE   - Delete a file\n");
+        vga_write("  sync      - Flush filesystem to disk\n");
+        vga_write("  basic     - BASIC interpreter\n");
+        vga_write("  cc FILE   - Compile C file\n");
+        vga_write("  cc FILE -r - Compile and run\n");
+        vga_write("  run FILE  - Execute binary\n");
+        vga_write("  gfx       - Graphics demo (640x480)\n");
+        vga_write("  reboot    - Reboot the system\n");
     } else if (strcmp(cmd, "clear") == 0) {
         vga_clear();
     } else if (strcmp(cmd, "version") == 0) {
@@ -161,6 +169,61 @@ static void shell_execute(const char *cmd) {
         while (*fname == ' ') fname++;
         basic_load_and_run(fname);
         shell_prompt();
+    } else if (strncmp(cmd, "cc ", 3) == 0) {
+        const char *args = cmd + 3;
+        while (*args == ' ') args++;
+        /* Check for -r flag */
+        char fname[32];
+        int fi = 0;
+        while (args[fi] && args[fi] != ' ' && fi < 31) {
+            fname[fi] = args[fi];
+            fi++;
+        }
+        fname[fi] = '\0';
+        /* Check if " -r" follows */
+        const char *rest = args + fi;
+        while (*rest == ' ') rest++;
+        if (strcmp(rest, "-r") == 0) {
+            cc_compile_and_run(fname);
+        } else {
+            cc_compile(fname);
+        }
+    } else if (strncmp(cmd, "run ", 4) == 0) {
+        const char *fname = cmd + 4;
+        while (*fname == ' ') fname++;
+        if (*fname == '\0') {
+            vga_write("Usage: run <filename.bin>\n");
+        } else {
+            prog_exec(fname);
+        }
+    } else if (strcmp(cmd, "sync") == 0) {
+        if (diskfs_sync() == 0) {
+            vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+            vga_write("Synced to disk\n");
+            vga_set_color(VGA_WHITE, VGA_BLACK);
+        } else {
+            vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+            vga_write("No disk available\n");
+            vga_set_color(VGA_WHITE, VGA_BLACK);
+        }
+    } else if (strncmp(cmd, "rm ", 3) == 0) {
+        const char *filename = cmd + 3;
+        while (*filename == ' ') filename++;
+        if (*filename == '\0') {
+            vga_write("Usage: rm <filename>\n");
+        } else {
+            if (diskfs_delete_file(filename) == 0) {
+                vga_write("Deleted: ");
+                vga_write(filename);
+                vga_putchar('\n');
+            } else {
+                vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+                vga_write("File not found: ");
+                vga_set_color(VGA_WHITE, VGA_BLACK);
+                vga_write(filename);
+                vga_putchar('\n');
+            }
+        }
     } else if (strcmp(cmd, "reboot") == 0) {
         vga_write("Rebooting...\n");
         serial_write("Rebooting...\n");

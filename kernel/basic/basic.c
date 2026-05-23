@@ -8,6 +8,7 @@
 #include "drivers/vga.h"
 #include "drivers/keyboard.h"
 #include "fs/fat12.h"
+#include "fs/diskfs.h"
 #include "lib/string.h"
 
 #define INPUT_MAX 160
@@ -206,7 +207,7 @@ static void cmd_save(const char *filename) {
         line = prog_next_line(line);
     }
 
-    if (fat12_write_file(filename, save_buf, offset) == 0) {
+    if (diskfs_write_file(filename, save_buf, offset) == 0) {
         vga_write("OK\n");
     } else {
         vga_write("?SAVE ERROR\n");

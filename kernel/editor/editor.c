@@ -4,6 +4,7 @@
 #include "drivers/vga.h"
 #include "drivers/keyboard.h"
 #include "fs/fat12.h"
+#include "fs/diskfs.h"
 #include "lib/string.h"
 #include "drivers/serial.h"
 
@@ -201,6 +202,13 @@ static void handle_insert(int key) {
             sync_cursor();
             modified = true;
             break;
+        case '\t':
+            /* Insert 4 spaces */
+            buf_insert(' '); buf_insert(' ');
+            buf_insert(' '); buf_insert(' ');
+            sync_cursor();
+            modified = true;
+            break;
         case KEY_LEFT:
             buf_move_left();
             sync_cursor();
@@ -240,7 +248,7 @@ static int do_save(const char *save_name) {
     }
     static char save_buf[BUFFER_SIZE];
     uint32_t len = buf_get_content(save_buf, BUFFER_SIZE);
-    int result = fat12_write_file(save_name, (const uint8_t *)save_buf, len);
+    int result = diskfs_write_file(save_name, (const uint8_t *)save_buf, len);
     if (result != 0) {
         set_status("E: Write failed");
         return -1;

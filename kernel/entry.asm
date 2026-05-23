@@ -10,9 +10,21 @@ section .text
 global _start
 extern kernel_main
 
+extern _bss_start
+extern _bss_end
+
 _start:
-    ; Stack is already set up by Stage 2 (ESP = 0x90000)
-    ; But we set up our own stack in BSS for a cleaner setup
+    ; Use Stage 2's stack temporarily (ESP = 0x90000) to zero BSS
+    ; BSS must be zeroed before using our own stack (which lives in BSS)
+    mov edi, _bss_start
+    mov ecx, _bss_end
+    sub ecx, edi
+    shr ecx, 2              ; Convert bytes to dwords
+    xor eax, eax
+    cld
+    rep stosd
+
+    ; Now BSS is zeroed, safe to use our stack
     mov esp, stack_top
 
     ; Call the C kernel

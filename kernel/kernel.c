@@ -6,8 +6,9 @@
 #include "include/pic.h"
 #include "include/pmm.h"
 #include "include/paging.h"
-#include "fs/ramdisk.h"
+#include "fs/diskfs.h"
 #include "shell/shell.h"
+#include "cc/runtime.h"
 
 extern uint32_t _kernel_end;
 
@@ -48,9 +49,8 @@ void kernel_main(void) {
     paging_init();
     vga_write("[OK] Memory manager ready (PMM + Paging)\n");
 
-    /* Initialize filesystem */
-    ramdisk_init();
-    vga_write("[OK] FAT12 ramdisk ready\n");
+    /* Initialize filesystem (persistent HDD or ramdisk fallback) */
+    diskfs_init();
 
     /* Initialize SVGA */
     svga_init();
@@ -59,6 +59,10 @@ void kernel_main(void) {
     /* Initialize keyboard */
     keyboard_init();
     vga_write("[OK] PS/2 keyboard ready\n");
+
+    /* Initialize C compiler runtime */
+    runtime_init();
+    vga_write("[OK] C compiler runtime ready\n");
 
     vga_set_color(VGA_WHITE, VGA_BLACK);
     vga_write("\n");
