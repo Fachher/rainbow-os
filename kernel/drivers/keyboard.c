@@ -13,31 +13,39 @@ static int kbd_ring[KBD_BUF_SIZE];
 static volatile uint8_t kbd_head;
 static volatile uint8_t kbd_tail;
 
-/* Scancode Set 1 -> ASCII (US layout) */
+/* Scancode Set 1 -> ASCII (German QWERTZ layout) */
 static const char scancode_ascii[128] = {
+/*       Esc  1    2    3    4    5    6    7    8    9    0    ss   '    BS  */
     0,  27, '1','2','3','4','5','6','7','8','9','0','-','=', '\b',
-    '\t','q','w','e','r','t','y','u','i','o','p','[',']','\n',
-    0,  'a','s','d','f','g','h','j','k','l',';','\'','`',
-    0,  '\\','z','x','c','v','b','n','m',',','.','/', 0,
+/*  Tab  q    w    e    r    t    z    u    i    o    p    ue   +    Enter */
+    '\t','q','w','e','r','t','z','u','i','o','p','[','+','\n',
+/*  Ctrl a    s    d    f    g    h    j    k    l    oe   ae   ^    */
+    0,  'a','s','d','f','g','h','j','k','l',';','\'','^',
+/*  LSh  #    y    x    c    v    b    n    m    ,    .    -    RSh  */
+    0,  '#','y','x','c','v','b','n','m',',','.','-', 0,
     '*', 0, ' ', 0,
     0,0,0,0,0,0,0,0,0,0,  /* F1-F10 */
     0, 0,                   /* Num Lock, Scroll Lock */
     0,0,0,'-',0,0,0,'+',0,0,0,0,0,  /* Numpad */
     0, 0,                   /* unused */
-    0,0                     /* F11, F12 */
+    '<',0                   /* < key, F12 */
 };
 
 static const char scancode_ascii_shift[128] = {
-    0,  27, '!','@','#','$','%','^','&','*','(',')','_','+', '\b',
-    '\t','Q','W','E','R','T','Y','U','I','O','P','{','}','\n',
+/*       Esc  !    "    §    $    %    &    /    (    )    =    ?    `    BS  */
+    0,  27, '!','"','#','$','%','&','/','(',')','=','?','`', '\b',
+/*  Tab  Q    W    E    R    T    Z    U    I    O    P    UE   *    Enter */
+    '\t','Q','W','E','R','T','Z','U','I','O','P','{','*','\n',
+/*  Ctrl A    S    D    F    G    H    J    K    L    OE   AE   °    */
     0,  'A','S','D','F','G','H','J','K','L',':','"','~',
-    0,  '|','Z','X','C','V','B','N','M','<','>','?', 0,
+/*  LSh  '    Y    X    C    V    B    N    M    ;    :    _    RSh  */
+    0,  '\'','Y','X','C','V','B','N','M',';',':','_', 0,
     '*', 0, ' ', 0,
     0,0,0,0,0,0,0,0,0,0,
     0, 0,
     0,0,0,'-',0,0,0,'+',0,0,0,0,0,
     0, 0,
-    0,0
+    '>',0
 };
 
 static bool shift_held;
