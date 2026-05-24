@@ -9,6 +9,8 @@ struct editor_view {
     uint32_t top_line;       /* first visible line */
     uint32_t cursor_line;    /* cursor line in document */
     uint32_t cursor_col;     /* cursor column in document */
+    uint32_t sel_start;      /* selection start (buf pos), UINT32_MAX if none */
+    uint32_t sel_end;        /* selection end (exclusive) */
 };
 
 void view_init(struct editor_view *v);

@@ -9,6 +9,8 @@ void view_init(struct editor_view *v) {
     v->top_line = 0;
     v->cursor_line = 0;
     v->cursor_col = 0;
+    v->sel_start = (uint32_t)-1;
+    v->sel_end = (uint32_t)-1;
 }
 
 void view_scroll_to_cursor(struct editor_view *v) {
@@ -35,10 +37,16 @@ void view_render(struct editor_view *v, const char *filename, bool modified, con
             uint32_t line_len = buf_line_length(doc_line);
 
             for (uint8_t col = 0; col < v->screen_cols; col++) {
+                uint32_t bpos = line_start + col;
+                bool selected = (v->sel_start != (uint32_t)-1) &&
+                                (bpos >= v->sel_start && bpos < v->sel_end) &&
+                                (col < line_len);
+                uint8_t fg = selected ? VGA_BLACK : VGA_WHITE;
+                uint8_t bg = selected ? VGA_LIGHT_CYAN : VGA_BLACK;
                 if (col < line_len) {
-                    char c = buf_char_at(line_start + col);
+                    char c = buf_char_at(bpos);
                     if (c == '\t') c = ' ';
-                    vga_putchar_at(row, col, c, VGA_WHITE, VGA_BLACK);
+                    vga_putchar_at(row, col, c, fg, bg);
                 } else {
                     vga_putchar_at(row, col, ' ', VGA_WHITE, VGA_BLACK);
                 }

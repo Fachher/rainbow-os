@@ -8,7 +8,7 @@
 #include "lib/string.h"
 #include "drivers/serial.h"
 
-enum editor_mode { MODE_NORMAL, MODE_INSERT, MODE_COMMAND };
+enum editor_mode { MODE_NORMAL, MODE_INSERT, MODE_COMMAND, MODE_VISUAL, MODE_VISUAL_LINE };
 
 static struct editor_view view;
 static enum editor_mode mode;
@@ -20,14 +20,18 @@ static bool running;
 static bool awaiting_g;  /* for gg command */
 static bool awaiting_d;  /* for dd command */
 static bool awaiting_y;  /* for yy command */
-static char yank_buf[256];
+static uint32_t sel_anchor;      /* buffer position where visual selection started */
+static char yank_buf[4096];
 static uint32_t yank_len;
+static bool yank_linewise;       /* true if yanked content is line-wise (dd/yy/V) */
 
 static const char *mode_string(void) {
     switch (mode) {
-        case MODE_NORMAL:  return "NORMAL";
-        case MODE_INSERT:  return "INSERT";
-        case MODE_COMMAND: return "COMMAND";
+        case MODE_NORMAL:      return "NORMAL";
+        case MODE_INSERT:      return "INSERT";
+        case MODE_COMMAND:     return "COMMAND";
+        case MODE_VISUAL:      return "VISUAL";
+        case MODE_VISUAL_LINE: return "V-LINE";
     }
     return "";
 }
@@ -85,6 +89,55 @@ static void delete_current_line(void) {
     modified = true;
 }
 
+/* Yank a range of buffer positions into yank_buf */
+static void yank_range(uint32_t start, uint32_t end) {
+    uint32_t len = end - start;
+    if (len > sizeof(yank_buf) - 1) len = sizeof(yank_buf) - 1;
+    for (uint32_t i = 0; i < len; i++)
+        yank_buf[i] = buf_char_at(start + i);
+    yank_len = len;
+}
+
+/* Delete a range of buffer positions */
+static void delete_range(uint32_t start, uint32_t end) {
+    buf_move_to(start);
+    uint32_t count = end - start;
+    for (uint32_t i = 0; i < count; i++)
+        buf_delete_fwd();
+    sync_cursor();
+    modified = true;
+}
+
+/* Compute visual selection bounds */
+static void get_sel_bounds(uint32_t *start, uint32_t *end) {
+    uint32_t cursor = buf_cursor_pos();
+    if (cursor <= sel_anchor) {
+        *start = cursor;
+        *end = sel_anchor + 1;
+    } else {
+        *start = sel_anchor;
+        *end = cursor + 1;
+    }
+    if (*end > buf_length()) *end = buf_length();
+
+    if (mode == MODE_VISUAL_LINE) {
+        /* Expand to full line boundaries */
+        uint32_t sline = 0, eline = 0;
+        uint32_t len = buf_length();
+        uint32_t line = 0;
+        for (uint32_t i = 0; i < len; i++) {
+            if (i == *start) sline = line;
+            if (i < *end) eline = line;
+            if (buf_char_at(i) == '\n') line++;
+        }
+        *start = buf_line_start(sline);
+        uint32_t estart = buf_line_start(eline);
+        uint32_t elen = buf_line_length(eline);
+        *end = estart + elen;
+        if (*end < buf_length()) (*end)++;  /* include trailing newline */
+    }
+}
+
 /* --- Normal Mode --- */
 
 static void handle_normal(int key) {
@@ -100,6 +153,7 @@ static void handle_normal(int key) {
         awaiting_d = false;
         if (key == 'd') {
             yank_current_line();
+            yank_linewise = true;
             delete_current_line();
         }
         return;
@@ -108,6 +162,7 @@ static void handle_normal(int key) {
         awaiting_y = false;
         if (key == 'y') {
             yank_current_line();
+            yank_linewise = true;
         }
         return;
     }
@@ -196,18 +251,33 @@ static void handle_normal(int key) {
             break;
         case 'p': {
             if (yank_len == 0) break;
-            /* Paste below current line */
-            uint32_t line = buf_cursor_line();
-            uint32_t start = buf_line_start(line);
-            uint32_t len = buf_line_length(line);
-            buf_move_to(start + len);
-            buf_insert('\n');
-            for (uint32_t i = 0; i < yank_len; i++)
-                buf_insert(yank_buf[i]);
+            if (yank_linewise) {
+                /* Paste below current line */
+                uint32_t line = buf_cursor_line();
+                uint32_t start = buf_line_start(line);
+                uint32_t len = buf_line_length(line);
+                buf_move_to(start + len);
+                buf_insert('\n');
+                for (uint32_t i = 0; i < yank_len; i++)
+                    buf_insert(yank_buf[i]);
+            } else {
+                /* Paste after cursor (charwise) */
+                buf_move_right();
+                for (uint32_t i = 0; i < yank_len; i++)
+                    buf_insert(yank_buf[i]);
+            }
             sync_cursor();
             modified = true;
             break;
         }
+        case 'v':
+            sel_anchor = buf_cursor_pos();
+            mode = MODE_VISUAL;
+            break;
+        case 'V':
+            sel_anchor = buf_cursor_pos();
+            mode = MODE_VISUAL_LINE;
+            break;
         case ':':
             mode = MODE_COMMAND;
             cmd_len = 0;
@@ -279,6 +349,95 @@ static void handle_insert(int key) {
                 modified = true;
             }
             break;
+    }
+}
+
+/* --- Visual Mode --- */
+
+static void handle_visual(int key) {
+    if (awaiting_g) {
+        awaiting_g = false;
+        if (key == 'g') move_to_line_col(0, 0);
+        return;
+    }
+
+    switch (key) {
+        case KEY_ESCAPE:
+            mode = MODE_NORMAL;
+            break;
+        case 'v':
+            if (mode == MODE_VISUAL) mode = MODE_NORMAL;
+            else mode = MODE_VISUAL;
+            break;
+        case 'V':
+            if (mode == MODE_VISUAL_LINE) mode = MODE_NORMAL;
+            else mode = MODE_VISUAL_LINE;
+            break;
+
+        /* Movement */
+        case 'h': case KEY_LEFT:
+            buf_move_left();
+            sync_cursor();
+            break;
+        case 'l': case KEY_RIGHT:
+            buf_move_right();
+            sync_cursor();
+            break;
+        case 'j': case KEY_DOWN:
+            move_vertical(1);
+            break;
+        case 'k': case KEY_UP:
+            move_vertical(-1);
+            break;
+        case '0': case KEY_HOME: {
+            uint32_t line = buf_cursor_line();
+            buf_move_to(buf_line_start(line));
+            sync_cursor();
+            break;
+        }
+        case '$': case KEY_END: {
+            uint32_t line = buf_cursor_line();
+            uint32_t start = buf_line_start(line);
+            uint32_t len = buf_line_length(line);
+            uint32_t end = start + len;
+            if (len > 0) end--;
+            buf_move_to(end);
+            sync_cursor();
+            break;
+        }
+        case 'g':
+            awaiting_g = true;
+            break;
+        case 'G': {
+            uint32_t last_line = buf_line_count() - 1;
+            move_to_line_col(last_line, 0);
+            break;
+        }
+        case KEY_CTRL('u'): case KEY_PGUP:
+            move_vertical(-(int)(view.screen_rows / 2));
+            break;
+        case KEY_CTRL('d'): case KEY_PGDN:
+            move_vertical((int)(view.screen_rows / 2));
+            break;
+
+        /* Actions */
+        case 'y': {
+            uint32_t s, e;
+            get_sel_bounds(&s, &e);
+            yank_range(s, e);
+            yank_linewise = (mode == MODE_VISUAL_LINE);
+            mode = MODE_NORMAL;
+            break;
+        }
+        case 'd': case 'x': {
+            uint32_t s, e;
+            get_sel_bounds(&s, &e);
+            yank_range(s, e);
+            yank_linewise = (mode == MODE_VISUAL_LINE);
+            delete_range(s, e);
+            mode = MODE_NORMAL;
+            break;
+        }
     }
 }
 
@@ -416,6 +575,14 @@ void editor_open(const char *fname) {
         if (mode == MODE_NORMAL && cmd_buf[0] && cmd_buf[0] != ':') {
             cmd_display = cmd_buf;
         }
+        /* Compute selection highlight range */
+        if (mode == MODE_VISUAL || mode == MODE_VISUAL_LINE) {
+            get_sel_bounds(&view.sel_start, &view.sel_end);
+        } else {
+            view.sel_start = (uint32_t)-1;
+            view.sel_end = (uint32_t)-1;
+        }
+
         view_render(&view, filename[0] ? filename : (const char *)0,
                     modified, mode_string(), cmd_display);
 
@@ -427,9 +594,11 @@ void editor_open(const char *fname) {
         }
 
         switch (mode) {
-            case MODE_NORMAL:  handle_normal(key);  break;
-            case MODE_INSERT:  handle_insert(key);  break;
-            case MODE_COMMAND: handle_command(key);  break;
+            case MODE_NORMAL:      handle_normal(key);  break;
+            case MODE_INSERT:      handle_insert(key);  break;
+            case MODE_COMMAND:     handle_command(key);  break;
+            case MODE_VISUAL:
+            case MODE_VISUAL_LINE: handle_visual(key);   break;
         }
     }
 
