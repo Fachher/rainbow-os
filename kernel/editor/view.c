@@ -59,6 +59,16 @@ void view_render(struct editor_view *v, const char *filename, bool modified, con
     for (uint8_t col = 0; col < v->screen_cols; col++)
         vga_putchar_at(status_row, col, ' ', VGA_BLACK, VGA_WHITE);
 
+    /* Command/status message takes over the entire status bar */
+    if (cmd_buf && cmd_buf[0]) {
+        uint8_t ci = 0;
+        for (; cmd_buf[ci] && ci < v->screen_cols; ci++)
+            vga_putchar_at(status_row, ci, cmd_buf[ci], VGA_BLACK, VGA_WHITE);
+        if (cmd_buf[0] == ':')
+            vga_set_cursor(status_row, ci);
+        return;
+    }
+
     /* Left side: filename + modified flag */
     uint8_t col = 0;
     if (filename) {
@@ -105,12 +115,6 @@ void view_render(struct editor_view *v, const char *filename, bool modified, con
     uint8_t right_start = v->screen_cols - pi;
     for (uint8_t i = 0; i < pi; i++)
         vga_putchar_at(status_row, right_start + i, pos_buf[i], VGA_BLACK, VGA_WHITE);
-
-    /* If in command mode, show command buffer on status bar */
-    if (cmd_buf && cmd_buf[0]) {
-        for (uint8_t i = 0; cmd_buf[i] && i < v->screen_cols; i++)
-            vga_putchar_at(status_row, i, cmd_buf[i], VGA_BLACK, VGA_WHITE);
-    }
 
     /* Position hardware cursor */
     uint8_t cur_row = (uint8_t)(v->cursor_line - v->top_line);
