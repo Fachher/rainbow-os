@@ -157,20 +157,16 @@ static void shell_execute(const char *cmd) {
         vga_set_color(VGA_WHITE, VGA_BLACK);
     } else if (strcmp(cmd, "edit") == 0) {
         editor_open((const char *)0);
-        shell_prompt();
     } else if (strncmp(cmd, "edit ", 5) == 0) {
         const char *fname = cmd + 5;
         while (*fname == ' ') fname++;
         editor_open(fname);
-        shell_prompt();
     } else if (strcmp(cmd, "basic") == 0) {
         basic_run();
-        shell_prompt();
     } else if (strncmp(cmd, "basic ", 6) == 0) {
         const char *fname = cmd + 6;
         while (*fname == ' ') fname++;
         basic_load_and_run(fname);
-        shell_prompt();
     } else if (strncmp(cmd, "cc ", 3) == 0) {
         const char *args = cmd + 3;
         while (*args == ' ') args++;
