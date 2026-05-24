@@ -18,6 +18,11 @@ uint32_t buf_cursor_pos(void);
 char     buf_char_at(uint32_t pos);
 uint32_t buf_get_content(char *out, uint32_t max);
 
+/* Undo/redo */
+void     buf_undo_boundary(void);
+bool     buf_undo(void);
+bool     buf_redo(void);
+
 /* Line index */
 uint32_t buf_line_count(void);
 uint32_t buf_cursor_line(void);

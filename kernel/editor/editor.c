@@ -152,6 +152,7 @@ static void handle_normal(int key) {
     if (awaiting_d) {
         awaiting_d = false;
         if (key == 'd') {
+            buf_undo_boundary();
             yank_current_line();
             yank_linewise = true;
             delete_current_line();
@@ -207,14 +208,17 @@ static void handle_normal(int key) {
             break;
         }
         case 'i':
+            buf_undo_boundary();
             mode = MODE_INSERT;
             break;
         case 'a':
+            buf_undo_boundary();
             buf_move_right();
             sync_cursor();
             mode = MODE_INSERT;
             break;
         case 'o': {
+            buf_undo_boundary();
             /* Open line below */
             uint32_t line = buf_cursor_line();
             uint32_t start = buf_line_start(line);
@@ -227,6 +231,7 @@ static void handle_normal(int key) {
             break;
         }
         case 'O': {
+            buf_undo_boundary();
             /* Open line above */
             uint32_t line = buf_cursor_line();
             uint32_t start = buf_line_start(line);
@@ -239,6 +244,7 @@ static void handle_normal(int key) {
             break;
         }
         case 'x': case KEY_DELETE:
+            buf_undo_boundary();
             buf_delete_fwd();
             sync_cursor();
             modified = true;
@@ -251,6 +257,7 @@ static void handle_normal(int key) {
             break;
         case 'p': {
             if (yank_len == 0) break;
+            buf_undo_boundary();
             if (yank_linewise) {
                 /* Paste below current line */
                 uint32_t line = buf_cursor_line();
@@ -278,6 +285,19 @@ static void handle_normal(int key) {
             sel_anchor = buf_cursor_pos();
             mode = MODE_VISUAL_LINE;
             break;
+        case 'u':
+            buf_undo_boundary();
+            if (buf_undo()) {
+                sync_cursor();
+                modified = true;
+            }
+            break;
+        case KEY_CTRL('r'):
+            if (buf_redo()) {
+                sync_cursor();
+                modified = true;
+            }
+            break;
         case ':':
             mode = MODE_COMMAND;
             cmd_len = 0;
@@ -299,6 +319,7 @@ static void handle_normal(int key) {
 static void handle_insert(int key) {
     switch (key) {
         case KEY_ESCAPE:
+            buf_undo_boundary();
             mode = MODE_NORMAL;
             /* Move cursor back one if not at line start (vim behavior) */
             if (buf_cursor_col() > 0) buf_move_left();
@@ -430,6 +451,7 @@ static void handle_visual(int key) {
             break;
         }
         case 'd': case 'x': {
+            buf_undo_boundary();
             uint32_t s, e;
             get_sel_bounds(&s, &e);
             yank_range(s, e);
