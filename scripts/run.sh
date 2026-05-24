@@ -8,5 +8,4 @@ qemu-system-i386 \
     -vga cirrus \
     -drive file="$BUILD_DIR/rainbow-os-hdd.img",format=raw,if=ide \
     -serial stdio \
-    -no-shutdown \
     -d guest_errors

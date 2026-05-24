@@ -11,6 +11,7 @@
 #include "basic/basic.h"
 #include "cc/cc.h"
 #include "cc/runtime.h"
+#include "include/io.h"
 
 #define CMD_MAX_LEN 78
 #define PROMPT_STR  "> "
@@ -44,6 +45,7 @@ static void shell_execute(const char *cmd) {
         vga_write("  run FILE  - Execute binary\n");
         vga_write("  gfx       - Graphics demo (640x480)\n");
         vga_write("  reboot    - Reboot the system\n");
+        vga_write("  shutdown  - Power off the system\n");
     } else if (strcmp(cmd, "clear") == 0) {
         vga_clear();
     } else if (strcmp(cmd, "version") == 0) {
@@ -230,6 +232,22 @@ static void shell_execute(const char *cmd) {
         /* Triple-fault: load null IDT, then trigger interrupt */
         struct { uint16_t limit; uint32_t base; } __attribute__((packed)) null_idt = {0, 0};
         __asm__ volatile("lidt %0; int $0x03" : : "m"(null_idt));
+    } else if (strcmp(cmd, "shutdown") == 0) {
+        vga_write("Shutting down...\n");
+        serial_write("Shutting down...\n");
+        /* QEMU i440FX/PIIX4 ACPI shutdown:
+         * 1. Set PM base address in PIIX4 PM PCI config (bus 0, dev 1, func 3)
+         * 2. Enable ACPI I/O space
+         * 3. Write SLP_EN | SLP_TYP=S5 to PM1a control register */
+        uint32_t pci_addr = 0x80000000 | (1 << 11) | (3 << 8);
+        /* Set PMBA (offset 0x40) to 0xB000 */
+        outl(0xCF8, pci_addr | 0x40);
+        outl(0xCFC, 0xB001);
+        /* Enable ACPI I/O: PMREGMISC (offset 0x80) bit 0 */
+        outl(0xCF8, pci_addr | 0x80);
+        outb(0xCFC, inb(0xCFC) | 0x01);
+        /* PM1a_CNT = PMBA + 4, write SLP_EN (bit 13) | SLP_TYP for S5 */
+        outw(0xB004, 0x2000);
     } else {
         vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
         vga_write("Unknown command: ");
