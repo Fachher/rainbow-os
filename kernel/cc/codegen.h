@@ -75,6 +75,8 @@ void cg_jump_nonzero(int label);
 void cg_func_begin(struct symbol *fn);
 void cg_func_end(void);
 void cg_call_symbol(struct symbol *fn);
+void cg_call_syscall(int index);
+void cg_reverse_stack(int n);
 void cg_return(void);
 
 /* Strings */

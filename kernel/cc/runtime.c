@@ -32,6 +32,83 @@ static void sys_memset_wrap(void *dst, int val, int n) {
     memset(dst, val, (size_t)n);
 }
 
+static void print_dec(int val) {
+    if (val < 0) {
+        vga_putchar('-');
+        val = -val;
+    }
+    char buf[12];
+    int i = 0;
+    if (val == 0) {
+        buf[i++] = '0';
+    } else {
+        while (val > 0) {
+            buf[i++] = '0' + val % 10;
+            val /= 10;
+        }
+    }
+    while (--i >= 0) vga_putchar(buf[i]);
+}
+
+static void print_unsigned(uint32_t val) {
+    char buf[12];
+    int i = 0;
+    if (val == 0) {
+        buf[i++] = '0';
+    } else {
+        while (val > 0) {
+            buf[i++] = '0' + val % 10;
+            val /= 10;
+        }
+    }
+    while (--i >= 0) vga_putchar(buf[i]);
+}
+
+static void print_hex(uint32_t val) {
+    char buf[9];
+    int i = 0;
+    if (val == 0) {
+        buf[i++] = '0';
+    } else {
+        while (val > 0) {
+            int d = val & 0xF;
+            buf[i++] = d < 10 ? '0' + d : 'a' + d - 10;
+            val >>= 4;
+        }
+    }
+    while (--i >= 0) vga_putchar(buf[i]);
+}
+
+static int sys_printf(const char *fmt, ...) {
+    uint32_t *ap = (uint32_t *)(&fmt + 1);
+
+    while (*fmt) {
+        if (*fmt == '%') {
+            fmt++;
+            switch (*fmt) {
+                case 'd': print_dec((int)*ap++); break;
+                case 'u': print_unsigned(*ap++); break;
+                case 'x': print_hex(*ap++); break;
+                case 's': {
+                    const char *s = (const char *)*ap++;
+                    if (s) vga_write(s);
+                    break;
+                }
+                case 'c': vga_putchar((char)*ap++); break;
+                case '%': vga_putchar('%'); break;
+                default:
+                    vga_putchar('%');
+                    vga_putchar(*fmt);
+                    break;
+            }
+        } else {
+            vga_putchar(*fmt);
+        }
+        fmt++;
+    }
+    return 0;
+}
+
 /* Syscall table: array of function pointers at a fixed address */
 typedef void (*syscall_fn)(void);
 
@@ -44,6 +121,7 @@ void runtime_init(void) {
     table[SYS_PEEK]    = (uint32_t)sys_peek;
     table[SYS_POKE]    = (uint32_t)sys_poke;
     table[SYS_MEMSET]  = (uint32_t)sys_memset_wrap;
+    table[SYS_PRINTF]  = (uint32_t)sys_printf;
 }
 
 /* Return-to-shell flag, set by exit syscall */

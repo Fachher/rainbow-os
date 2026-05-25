@@ -1,6 +1,7 @@
 #include "cc/codegen.h"
 #include "cc/sym.h"
 #include "cc/token.h"
+#include "cc/runtime.h"
 #include "lib/string.h"
 
 static uint8_t code[CG_CODE_MAX];
@@ -375,6 +376,35 @@ void cg_call_symbol(struct symbol *fn) {
         num_fixups++;
     }
     cg_emit_dword(0);
+}
+
+void cg_call_syscall(int index) {
+    /* call [disp32]: FF 15 <addr32>
+       Loads function pointer from syscall table and calls it */
+    cg_emit_byte(0xFF);
+    cg_emit_byte(0x15);
+    cg_emit_dword(SYSCALL_TABLE_ADDR + index * 4);
+}
+
+void cg_reverse_stack(int n) {
+    /* Reverse top n dwords on stack (converts L-to-R push to cdecl order).
+       Swaps [esp+i*4] with [esp+(n-1-i)*4] using EAX/ECX as temps. */
+    for (int i = 0; i < n / 2; i++) {
+        int lo = i * 4;
+        int hi = (n - 1 - i) * 4;
+        /* mov eax, [esp + lo] */
+        cg_emit_byte(0x8B); cg_emit_byte(0x44); cg_emit_byte(0x24);
+        cg_emit_byte((uint8_t)lo);
+        /* mov ecx, [esp + hi] */
+        cg_emit_byte(0x8B); cg_emit_byte(0x4C); cg_emit_byte(0x24);
+        cg_emit_byte((uint8_t)hi);
+        /* mov [esp + lo], ecx */
+        cg_emit_byte(0x89); cg_emit_byte(0x4C); cg_emit_byte(0x24);
+        cg_emit_byte((uint8_t)lo);
+        /* mov [esp + hi], eax */
+        cg_emit_byte(0x89); cg_emit_byte(0x44); cg_emit_byte(0x24);
+        cg_emit_byte((uint8_t)hi);
+    }
 }
 
 void cg_return(void) {

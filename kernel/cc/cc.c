@@ -80,6 +80,10 @@ int cc_compile(const char *filename) {
     /* Parse and generate code */
     parse_program();
 
+    if (parse_had_error()) {
+        return -1;
+    }
+
     /* Get output binary */
     int out_size;
     uint8_t *out = cg_output(&out_size);

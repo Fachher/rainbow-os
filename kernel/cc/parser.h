@@ -5,4 +5,7 @@
    Call lex_init() before parse_program(). */
 void parse_program(void);
 
+/* Returns 1 if the last parse_program() encountered errors */
+int parse_had_error(void);
+
 #endif

@@ -14,7 +14,8 @@
 #define SYS_PEEK        4
 #define SYS_POKE        5
 #define SYS_MEMSET      6
-#define SYS_COUNT        7
+#define SYS_PRINTF      7
+#define SYS_COUNT        8
 
 /* Initialize syscall table */
 void runtime_init(void);

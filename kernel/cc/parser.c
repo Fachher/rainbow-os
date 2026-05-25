@@ -2,6 +2,7 @@
 #include "cc/lexer.h"
 #include "cc/sym.h"
 #include "cc/codegen.h"
+#include "cc/runtime.h"
 #include "cc/token.h"
 #include "lib/string.h"
 #include "drivers/vga.h"
@@ -83,6 +84,26 @@ static int break_labels[MAX_LOOP_DEPTH];
 static int continue_labels[MAX_LOOP_DEPTH];
 static int loop_depth;
 
+/* Returns syscall index for built-in functions, or -1 if not built-in */
+static int builtin_syscall_index(const char *name) {
+    if (strcmp(name, "putchar") == 0) return SYS_PUTCHAR;
+    if (strcmp(name, "getchar") == 0) return SYS_GETCHAR;
+    if (strcmp(name, "puts") == 0)    return SYS_PUTS;
+    if (strcmp(name, "exit") == 0)    return SYS_EXIT;
+    if (strcmp(name, "peek") == 0)    return SYS_PEEK;
+    if (strcmp(name, "poke") == 0)    return SYS_POKE;
+    if (strcmp(name, "memset") == 0)  return SYS_MEMSET;
+    if (strcmp(name, "printf") == 0)  return SYS_PRINTF;
+    return -1;
+}
+
+/* Emit a built-in syscall: reverse stack for cdecl, indirect call */
+static void emit_builtin_call(int sys_idx, int argc) {
+    if (argc >= 2) cg_reverse_stack(argc);
+    cg_call_syscall(sys_idx);
+    if (argc > 0) cg_add_esp(argc * 4);
+}
+
 /* ---- Expression parsing (single-pass: result in EAX) ---- */
 
 static void parse_primary_expr(void) {
@@ -129,13 +150,18 @@ static void parse_primary_expr(void) {
             }
             expect(TOK_RPAREN);
 
-            struct symbol *fn = sym_find_global(name);
-            if (!fn) {
-                /* Forward reference — add as undefined function */
-                fn = sym_add_global(name, SYM_FUNCTION, DT_INT);
+            int sys_idx = builtin_syscall_index(name);
+            if (sys_idx >= 0) {
+                emit_builtin_call(sys_idx, argc);
+            } else {
+                struct symbol *fn = sym_find_global(name);
+                if (!fn) {
+                    /* Forward reference — add as undefined function */
+                    fn = sym_add_global(name, SYM_FUNCTION, DT_INT);
+                }
+                cg_call_symbol(fn);
+                if (argc > 0) cg_add_esp(argc * 4);
             }
-            cg_call_symbol(fn);
-            if (argc > 0) cg_add_esp(argc * 4);
         } else if (lex_peek() == TOK_LBRACKET) {
             /* Array indexing: a[i] = *(a + i * element_size) */
             struct symbol *s = sym_find(name);
@@ -480,30 +506,8 @@ static void parse_assign_expr(void) {
             return;
         }
 
-        /* Not assignment — re-emit as variable load + continue with binary ops */
-        /* Load the variable */
-        struct symbol *s = sym_find(name);
-        if (!s) { error("undeclared variable"); cg_load_num(0); }
-        else {
-            if (s->kind == SYM_FUNCTION) {
-                /* Could be function pointer, but for now load address */
-                cg_load_num(s->offset);
-            } else if (s->kind == SYM_LOCAL_VAR || s->kind == SYM_PARAM) {
-                if (s->size > 0)
-                    cg_lea_local(s->offset);
-                else
-                    cg_load_local(s->offset);
-            } else {
-                if (s->size > 0)
-                    cg_load_num(s->offset);
-                else
-                    cg_load_global(s->offset);
-            }
-        }
-
-        /* Now check for function call (ident(...)) */
+        /* Check for function call BEFORE variable load */
         if (lex_peek() == TOK_LPAREN) {
-            /* This was a function call, not a var load. Redo. */
             lex_next();
             int argc = 0;
             if (lex_peek() != TOK_RPAREN) {
@@ -518,10 +522,34 @@ static void parse_assign_expr(void) {
                 }
             }
             expect(TOK_RPAREN);
-            struct symbol *fn = sym_find_global(name);
-            if (!fn) fn = sym_add_global(name, SYM_FUNCTION, DT_INT);
-            cg_call_symbol(fn);
-            if (argc > 0) cg_add_esp(argc * 4);
+            int sys_idx = builtin_syscall_index(name);
+            if (sys_idx >= 0) {
+                emit_builtin_call(sys_idx, argc);
+            } else {
+                struct symbol *fn = sym_find_global(name);
+                if (!fn) fn = sym_add_global(name, SYM_FUNCTION, DT_INT);
+                cg_call_symbol(fn);
+                if (argc > 0) cg_add_esp(argc * 4);
+            }
+        } else {
+            /* Variable load */
+            struct symbol *s = sym_find(name);
+            if (!s) { error("undeclared variable"); cg_load_num(0); }
+            else {
+                if (s->kind == SYM_FUNCTION) {
+                    cg_load_num(s->offset);
+                } else if (s->kind == SYM_LOCAL_VAR || s->kind == SYM_PARAM) {
+                    if (s->size > 0)
+                        cg_lea_local(s->offset);
+                    else
+                        cg_load_local(s->offset);
+                } else {
+                    if (s->size > 0)
+                        cg_load_num(s->offset);
+                    else
+                        cg_load_global(s->offset);
+                }
+            }
         }
 
         /* Continue with binary expression operators from or_expr level
@@ -823,7 +851,7 @@ static void parse_local_decl(int data_type) {
 
 static void parse_block(void) {
     expect(TOK_LBRACE);
-    while (lex_peek() != TOK_RBRACE && lex_peek() != TOK_EOF) {
+    while (lex_peek() != TOK_RBRACE && lex_peek() != TOK_EOF && !had_error) {
         parse_statement();
     }
     expect(TOK_RBRACE);
@@ -933,6 +961,10 @@ static void parse_global_var(const char *name, int data_type) {
     }
 
     expect(TOK_SEMI);
+}
+
+int parse_had_error(void) {
+    return had_error;
 }
 
 void parse_program(void) {
