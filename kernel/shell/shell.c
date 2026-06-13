@@ -12,6 +12,7 @@
 #include "cc/cc.h"
 #include "cc/runtime.h"
 #include "game/asteroids.h"
+#include "game/space_invaders.h"
 #include "include/io.h"
 
 #define CMD_MAX_LEN 78
@@ -22,7 +23,7 @@ static uint32_t cmd_len;
 
 static const char *const shell_commands[] = {
     "help", "clear", "version", "meminfo", "ls", "cat", "edit", "rm",
-    "sync", "basic", "cc", "run", "gfx", "asteroids", "reboot", "shutdown", 0
+    "sync", "basic", "cc", "run", "gfx", "asteroids", "invaders", "reboot", "shutdown", 0
 };
 
 static void shell_prompt(void) {
@@ -51,6 +52,7 @@ static void shell_execute(const char *cmd) {
         vga_write("  run FILE  - Execute binary\n");
         vga_write("  gfx       - Graphics demo (800x600)\n");
         vga_write("  asteroids - Play Asteroids\n");
+        vga_write("  invaders  - Play Space Invaders\n");
         vga_write("  reboot    - Reboot the system\n");
         vga_write("  shutdown  - Power off the system\n");
     } else if (strcmp(cmd, "clear") == 0) {
@@ -165,6 +167,8 @@ static void shell_execute(const char *cmd) {
         vga_set_color(VGA_WHITE, VGA_BLACK);
     } else if (strcmp(cmd, "asteroids") == 0) {
         asteroids_run();
+    } else if (strcmp(cmd, "invaders") == 0) {
+        invaders_run();
     } else if (strcmp(cmd, "edit") == 0) {
         editor_open((const char *)0);
     } else if (strncmp(cmd, "edit ", 5) == 0) {

@@ -24,6 +24,7 @@ set(KERNEL_SOURCES
     kernel/fs/diskfs.c
     kernel/shell/shell.c
     kernel/game/asteroids.c
+    kernel/game/space_invaders.c
     kernel/lib/string.c
     kernel/editor/buffer.c
     kernel/editor/view.c
