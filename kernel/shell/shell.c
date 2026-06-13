@@ -19,6 +19,11 @@
 static char cmd_buf[CMD_MAX_LEN + 1];
 static uint32_t cmd_len;
 
+static const char *const shell_commands[] = {
+    "help", "clear", "version", "meminfo", "ls", "cat", "edit", "rm",
+    "sync", "basic", "cc", "run", "gfx", "reboot", "shutdown", 0
+};
+
 static void shell_prompt(void) {
     vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
     vga_write(PROMPT_STR);
@@ -259,6 +264,83 @@ void shell_init(void) {
     shell_prompt();
 }
 
+/* Append a char to the command buffer and echo it (same as normal input). */
+static void shell_emit(char c) {
+    if (cmd_len < CMD_MAX_LEN) {
+        cmd_buf[cmd_len++] = c;
+        vga_putchar(c);
+        serial_putchar(c);
+    }
+}
+
+/* Tab completion: complete the current token against either the command list
+   (first word) or the root directory file names (later arguments). */
+static void shell_complete(void) {
+    /* Find the start of the token under the cursor (after the last space). */
+    uint32_t tok_start = cmd_len;
+    while (tok_start > 0 && cmd_buf[tok_start - 1] != ' ') tok_start--;
+    int is_cmd = (tok_start == 0);
+    const char *prefix = cmd_buf + tok_start;
+    uint32_t prefix_len = cmd_len - tok_start;
+
+    struct fat12_dirent entries[FAT12_MAX_FILES];
+    int file_count = 0;
+    int cand_count;
+    if (is_cmd) {
+        cand_count = 0;
+        while (shell_commands[cand_count]) cand_count++;
+    } else {
+        file_count = fat12_list_root(entries, FAT12_MAX_FILES);
+        cand_count = file_count;
+    }
+
+    char lcp[16];           /* longest common prefix of all matches */
+    uint32_t lcp_len = 0;
+    int match_count = 0;
+
+    for (int i = 0; i < cand_count; i++) {
+        const char *name = is_cmd ? shell_commands[i] : entries[i].name;
+        if (strncmp(name, prefix, prefix_len) != 0) continue;
+
+        if (match_count == 0) {
+            uint32_t n = strlen(name);
+            if (n > sizeof(lcp) - 1) n = sizeof(lcp) - 1;
+            for (uint32_t j = 0; j < n; j++) lcp[j] = name[j];
+            lcp_len = n;
+        } else {
+            uint32_t j = 0;
+            while (j < lcp_len && name[j] == lcp[j]) j++;
+            lcp_len = j;
+        }
+        match_count++;
+    }
+
+    if (match_count == 0) return;
+
+    /* Extend the buffer with the shared completion characters. */
+    for (uint32_t j = prefix_len; j < lcp_len; j++) shell_emit(lcp[j]);
+
+    if (match_count == 1) {
+        shell_emit(' ');
+    } else if (lcp_len == prefix_len) {
+        /* Ambiguous and nothing to extend: list the candidates. */
+        vga_putchar('\n');
+        serial_putchar('\n');
+        for (int i = 0; i < cand_count; i++) {
+            const char *name = is_cmd ? shell_commands[i] : entries[i].name;
+            if (strncmp(name, prefix, prefix_len) != 0) continue;
+            vga_write(name);
+            vga_write("  ");
+        }
+        vga_putchar('\n');
+        shell_prompt();
+        for (uint32_t j = 0; j < cmd_len; j++) {
+            vga_putchar(cmd_buf[j]);
+            serial_putchar(cmd_buf[j]);
+        }
+    }
+}
+
 static void shell_process_char(int c) {
     if (c == '\n') {
         vga_putchar('\n');
@@ -277,7 +359,7 @@ static void shell_process_char(int c) {
             serial_putchar('\b');
         }
     } else if (c == '\t') {
-        /* Ignore tabs for now */
+        shell_complete();
     } else if (c >= ' ' && c < 127 && cmd_len < CMD_MAX_LEN) {
         cmd_buf[cmd_len++] = (char)c;
         vga_putchar((char)c);
