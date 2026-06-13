@@ -8,7 +8,9 @@ set(CMAKE_ASM_NASM_FLAGS "-g -F dwarf")
 set(KERNEL_SOURCES
     kernel/entry.asm
     kernel/isr_stubs.asm
+    kernel/usermode.asm
     kernel/kernel.c
+    kernel/gdt.c
     kernel/idt.c
     kernel/pic.c
     kernel/pmm.c

@@ -3,6 +3,7 @@
 #include "drivers/keyboard.h"
 #include "drivers/svga.h"
 #include "drivers/timer.h"
+#include "gdt.h"
 #include "include/idt.h"
 #include "include/pic.h"
 #include "include/pmm.h"
@@ -39,6 +40,9 @@ void kernel_main(void) {
     vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
     vga_write("[OK] Kernel loaded successfully\n");
     vga_write("[OK] Serial console on COM1 (38400 baud)\n");
+
+    /* Load our own GDT (kernel + user segments + TSS) */
+    gdt_init();
 
     /* Initialize interrupts */
     pic_init();

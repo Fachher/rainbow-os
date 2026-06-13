@@ -379,11 +379,12 @@ void cg_call_symbol(struct symbol *fn) {
 }
 
 void cg_call_syscall(int index) {
-    /* call [disp32]: FF 15 <addr32>
-       Loads function pointer from syscall table and calls it */
-    cg_emit_byte(0xFF);
-    cg_emit_byte(0x15);
-    cg_emit_dword(SYSCALL_TABLE_ADDR + index * 4);
+    /* Syscall via int 0x80.
+       ebx = pointer to the cdecl args already on the stack,
+       eax = syscall number. Caller still cleans the args afterwards. */
+    cg_emit_byte(0x89); cg_emit_byte(0xE3);             /* mov ebx, esp   */
+    cg_emit_byte(0xB8); cg_emit_dword((uint32_t)index); /* mov eax, index */
+    cg_emit_byte(0xCD); cg_emit_byte(0x80);             /* int 0x80       */
 }
 
 void cg_reverse_stack(int n) {

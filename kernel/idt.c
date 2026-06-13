@@ -63,6 +63,8 @@ extern void irq13(void);
 extern void irq14(void);
 extern void irq15(void);
 
+extern void isr128(void);   /* syscall gate */
+
 extern void idt_flush(uint32_t);
 
 void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags) {
@@ -154,6 +156,9 @@ void idt_init(void) {
     idt_set_gate(45, (uint32_t)irq13, 0x08, 0x8E);
     idt_set_gate(46, (uint32_t)irq14, 0x08, 0x8E);
     idt_set_gate(47, (uint32_t)irq15, 0x08, 0x8E);
+
+    /* Syscall gate (int 0x80), DPL 3 so ring-3 code may invoke it (flags 0xEE) */
+    idt_set_gate(128, (uint32_t)isr128, 0x08, 0xEE);
 
     /* Load IDT */
     idt_flush((uint32_t)&idtp);
