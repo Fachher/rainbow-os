@@ -48,7 +48,7 @@ static void shell_execute(const char *cmd) {
         vga_write("  cc FILE   - Compile C file\n");
         vga_write("  cc FILE -r - Compile and run\n");
         vga_write("  run FILE  - Execute binary\n");
-        vga_write("  gfx       - Graphics demo (640x480)\n");
+        vga_write("  gfx       - Graphics demo (800x600)\n");
         vga_write("  reboot    - Reboot the system\n");
         vga_write("  shutdown  - Power off the system\n");
     } else if (strcmp(cmd, "clear") == 0) {
@@ -117,15 +117,16 @@ static void shell_execute(const char *cmd) {
             }
         }
     } else if (strcmp(cmd, "gfx") == 0) {
-        svga_set_mode_gfx();
+        /* Already in 800x600x8bpp; switch to the full 256-color palette. */
+        svga_rainbow_palette();
         svga_clear(0);
 
-        /* Rainbow arc */
+        /* Rainbow arc, centered in the lower half */
         for (int band = 0; band < 7; band++) {
             uint8_t color = 1 + band * 27;   /* Spread across rainbow palette */
-            int r_outer = 200 - band * 20;
-            int r_inner = r_outer - 18;
-            int cx = 320, cy = 380;
+            int r_outer = 260 - band * 26;
+            int r_inner = r_outer - 24;
+            int cx = SVGA_WIDTH / 2, cy = SVGA_HEIGHT - 120;
             for (int y = cy - r_outer; y <= cy; y++) {
                 for (int x = cx - r_outer; x <= cx + r_outer; x++) {
                     int dx = x - cx, dy = y - cy;
@@ -142,23 +143,23 @@ static void shell_execute(const char *cmd) {
         if (bar_w < 1) bar_w = 1;
         for (int i = 0; i < 192; i++) {
             svga_fill_rect(i * bar_w + (SVGA_WIDTH - 192 * bar_w) / 2,
-                          430, bar_w, 30, 1 + i);
+                          SVGA_HEIGHT - 50, bar_w, 40, 1 + i);
         }
 
-        /* Title text (simple pixel letters: "RAINBOW-OS") */
-        /* Draw a white box with title area */
-        svga_fill_rect(220, 20, 200, 30, 255);
-        svga_fill_rect(222, 22, 196, 26, 0);
+        /* Title bar */
+        svga_fill_rect(SVGA_WIDTH / 2 - 150, 30, 300, 40, 255);
+        svga_fill_rect(SVGA_WIDTH / 2 - 147, 33, 294, 34, 0);
 
-        /* Wait for any key to return to text mode */
-        serial_write("GFX demo active. Press any key for text mode.\n");
+        /* Wait for any key to return to the console */
+        serial_write("GFX demo active. Press any key to return.\n");
         keyboard_wait_any();
 
-        svga_set_mode_text();
-        vga_init();
+        /* Restore the console palette and repaint a blank console. */
+        vga_reset_palette();
+        vga_clear();
 
         vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-        vga_write("[OK] Returned to text mode\n");
+        vga_write("[OK] Returned to console\n");
         vga_set_color(VGA_WHITE, VGA_BLACK);
     } else if (strcmp(cmd, "edit") == 0) {
         editor_open((const char *)0);

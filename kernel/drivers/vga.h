@@ -3,9 +3,11 @@
 
 #include "include/types.h"
 
-#define VGA_BUFFER_ADDR 0xB8000
-#define VGA_WIDTH       80
-#define VGA_HEIGHT      25
+/* Text grid for the 800x600x8bpp framebuffer console (8x16 glyphs). */
+#define VGA_GLYPH_W     8
+#define VGA_GLYPH_H     16
+#define VGA_WIDTH       100     /* 800 / 8  */
+#define VGA_HEIGHT      37      /* 600 / 16 */
 
 enum vga_color {
     VGA_BLACK        = 0,
@@ -36,5 +38,9 @@ void vga_set_cursor(uint8_t row, uint8_t col);
 void vga_putchar_at(uint8_t row, uint8_t col, char c, uint8_t fg, uint8_t bg);
 uint8_t vga_get_rows(void);
 uint8_t vga_get_cols(void);
+
+/* Reprogram palette indices 0-15 with the standard console colors (call after
+   the gfx demo, which overwrites the palette with the rainbow ramp). */
+void vga_reset_palette(void);
 
 #endif

@@ -54,14 +54,14 @@ static void svga_set_bank(uint8_t bank) {
 }
 
 /* ============================================================================
- * 640x480x8bpp mode setup via standard VGA + Cirrus extensions
+ * 800x600x8bpp mode setup via standard VGA + Cirrus extensions
  * ============================================================================ */
 
-/* Misc output register */
-#define MISC_640x480 0xE3
+/* Misc output register (positive H/V sync, higher dot clock) */
+#define MISC_800x600 0x2B
 
 /* Sequencer registers (index 0-4) */
-static const uint8_t seq_640x480[] = {
+static const uint8_t seq_800x600[] = {
     0x03,   /* SR0: Reset */
     0x01,   /* SR1: Clocking Mode (8-dot chars) */
     0x0F,   /* SR2: Map Mask (all planes) */
@@ -69,31 +69,31 @@ static const uint8_t seq_640x480[] = {
     0x0E,   /* SR4: Memory Mode (chain-4, extended memory) */
 };
 
-/* CRTC registers (index 0-24) for 640x480 timing, 8bpp */
-static const uint8_t crtc_640x480[] = {
-    0x5F,   /* CR00: Horizontal Total */
-    0x4F,   /* CR01: Horizontal Display End */
-    0x50,   /* CR02: Start Horizontal Blanking */
+/* CRTC registers (index 0-24) for 800x600 timing, 8bpp */
+static const uint8_t crtc_800x600[] = {
+    0x7F,   /* CR00: Horizontal Total (1056/8 - 5) */
+    0x63,   /* CR01: Horizontal Display End (800/8 - 1) */
+    0x64,   /* CR02: Start Horizontal Blanking (800/8) */
     0x82,   /* CR03: End Horizontal Blanking */
-    0x54,   /* CR04: Start Horizontal Retrace */
-    0x80,   /* CR05: End Horizontal Retrace */
-    0x0B,   /* CR06: Vertical Total */
-    0x3E,   /* CR07: Overflow */
+    0x6B,   /* CR04: Start Horizontal Retrace */
+    0x1B,   /* CR05: End Horizontal Retrace */
+    0x72,   /* CR06: Vertical Total (628-2 = 0x272, low byte) */
+    0xF0,   /* CR07: Overflow (bit8/9 of vertical values) */
     0x00,   /* CR08: Preset Row Scan */
-    0x40,   /* CR09: Max Scan Line */
+    0x60,   /* CR09: Max Scan Line (overflow bits, scan=0) */
     0x00,   /* CR0A: Cursor Start */
     0x00,   /* CR0B: Cursor End */
     0x00,   /* CR0C: Start Address High */
     0x00,   /* CR0D: Start Address Low */
     0x00,   /* CR0E: Cursor Location High */
     0x00,   /* CR0F: Cursor Location Low */
-    0xEA,   /* CR10: Vertical Retrace Start */
-    0x0C,   /* CR11: Vertical Retrace End */
-    0xDF,   /* CR12: Vertical Display End */
-    0x50,   /* CR13: Offset (640/8 = 80 = 0x50 in dword mode) */
+    0x58,   /* CR10: Vertical Retrace Start (601 = 0x259, low byte) */
+    0x8C,   /* CR11: Vertical Retrace End */
+    0x57,   /* CR12: Vertical Display End (599 = 0x257, low byte) */
+    0x64,   /* CR13: Offset (800/8 = 100 = 0x64 in dword mode) */
     0x40,   /* CR14: Underline Location (dword mode) */
-    0xE7,   /* CR15: Start Vertical Blanking */
-    0x04,   /* CR16: End Vertical Blanking */
+    0x57,   /* CR15: Start Vertical Blanking */
+    0x73,   /* CR16: End Vertical Blanking */
     0xE3,   /* CR17: CRTC Mode Control */
     0xFF,   /* CR18: Line Compare */
 };
@@ -194,8 +194,11 @@ static void save_font(void) {
     vga_write_gc(0x05, 0x00);    /* GR5: no shift interleave */
     vga_write_gc(0x06, 0x04);    /* GR6: map at A0000, 64K */
 
+    /* VGA stores each glyph at a 32-byte stride in plane 2 (only the first 16
+       bytes are used for an 8x16 font). Compact to 16 bytes per glyph. */
     uint8_t *font_mem = (uint8_t *)0xA0000;
-    memcpy(saved_font, font_mem, sizeof(saved_font));
+    for (int ch = 0; ch < 256; ch++)
+        memcpy(saved_font + ch * 16, font_mem + ch * 32, 16);
 
     /* Restore text mode sequencer/GC settings */
     vga_write_seq(0x02, 0x03);
@@ -215,7 +218,8 @@ static void restore_font(void) {
     vga_write_gc(0x06, 0x04);    /* GR6: map at A0000, 64K */
 
     uint8_t *font_mem = (uint8_t *)0xA0000;
-    memcpy(font_mem, saved_font, sizeof(saved_font));
+    for (int ch = 0; ch < 256; ch++)
+        memcpy(font_mem + ch * 32, saved_font + ch * 16, 16);
 
     /* Restore text mode sequencer/GC settings */
     vga_write_seq(0x02, 0x03);
@@ -227,9 +231,9 @@ static void restore_font(void) {
 
 void svga_set_mode_gfx(void) {
     save_font();
-    program_regs(MISC_640x480,
-                 seq_640x480,  5,
-                 crtc_640x480, 25,
+    program_regs(MISC_800x600,
+                 seq_800x600,  5,
+                 crtc_800x600, 25,
                  gc_640x480,   9,
                  ac_640x480,   21);
 
@@ -239,7 +243,11 @@ void svga_set_mode_gfx(void) {
     current_bank = 0xFF;
     svga_set_bank(0);
 
-    serial_log("SVGA mode: 640x480x8bpp");
+    serial_log("SVGA mode: 800x600x8bpp");
+}
+
+const uint8_t *svga_rom_font(void) {
+    return saved_font;
 }
 
 void svga_set_mode_text(void) {
@@ -302,6 +310,42 @@ void svga_putpixel(int x, int y, uint8_t color) {
     *((uint8_t *)(VGA_FB + (offset & 0xFFFF))) = color;
 }
 
+/* Read/write a linear framebuffer range through the 64 KB bank window. */
+static void fb_read(uint32_t off, uint8_t *dst, uint32_t count) {
+    while (count) {
+        svga_set_bank(off >> 16);
+        uint32_t win = off & 0xFFFF;
+        uint32_t n = VGA_FB_SIZE - win;
+        if (n > count) n = count;
+        memcpy(dst, (uint8_t *)(VGA_FB + win), n);
+        off += n; dst += n; count -= n;
+    }
+}
+
+static void fb_write(uint32_t off, const uint8_t *src, uint32_t count) {
+    while (count) {
+        svga_set_bank(off >> 16);
+        uint32_t win = off & 0xFFFF;
+        uint32_t n = VGA_FB_SIZE - win;
+        if (n > count) n = count;
+        memcpy((uint8_t *)(VGA_FB + win), src, n);
+        off += n; src += n; count -= n;
+    }
+}
+
+/* Copy a linear range within the framebuffer. Safe for forward (dst < src)
+   copies via a one-scanline RAM bounce buffer (read and write banks can't
+   differ in single-bank Cirrus mode). */
+void svga_copy(uint32_t dst_off, uint32_t src_off, uint32_t count) {
+    static uint8_t buf[SVGA_WIDTH];
+    while (count) {
+        uint32_t n = count > sizeof(buf) ? sizeof(buf) : count;
+        fb_read(src_off, buf, n);
+        fb_write(dst_off, buf, n);
+        src_off += n; dst_off += n; count -= n;
+    }
+}
+
 void svga_hline(int x, int y, int w, uint8_t color) {
     for (int i = 0; i < w; i++)
         svga_putpixel(x + i, y, color);
@@ -321,7 +365,7 @@ void svga_fill_rect(int x, int y, int w, int h, uint8_t color) {
  * Rainbow palette setup (indices 0-255)
  * ============================================================================ */
 
-static void setup_rainbow_palette(void) {
+void svga_rainbow_palette(void) {
     /* 0 = black */
     svga_set_palette(0, 0, 0, 0);
 
@@ -360,6 +404,7 @@ static void setup_rainbow_palette(void) {
 }
 
 void svga_init(void) {
-    setup_rainbow_palette();
-    serial_log("SVGA palette initialized");
+    /* The framebuffer console (vga.c) owns palette indices 0-15; the rainbow
+       palette is programmed on demand by the gfx demo. Nothing to do here. */
+    serial_log("SVGA init (console owns palette)");
 }

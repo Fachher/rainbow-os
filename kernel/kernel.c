@@ -32,7 +32,7 @@ void kernel_main(void) {
     vga_set_color(VGA_WHITE, VGA_BLACK);
     vga_write("\n");
     vga_write("Rainbow-OS v0.1 - 486/66MHz, 32MB RAM\n");
-    vga_write("VGA Text Mode 80x25\n");
+    vga_write("Graphics Console 800x600x8 (100x37)\n");
     vga_write("\n");
 
     vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
