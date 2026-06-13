@@ -23,4 +23,10 @@ void keyboard_wait_any(void);
 bool keyboard_has_key(void);
 int  keyboard_getchar(void);
 
+/* Real-time held-key state (for games). scancode is the raw Set-1 code;
+   use keyboard_is_ext_down for E0-prefixed keys (arrows). */
+bool keyboard_is_down(uint8_t scancode);
+bool keyboard_is_ext_down(uint8_t scancode);
+void keyboard_flush(void);
+
 #endif

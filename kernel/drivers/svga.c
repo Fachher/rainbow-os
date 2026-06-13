@@ -333,6 +333,12 @@ static void fb_write(uint32_t off, const uint8_t *src, uint32_t count) {
     }
 }
 
+/* Blit a full-screen RAM back buffer (SVGA_WIDTH*SVGA_HEIGHT bytes) to the
+   framebuffer in one banked pass. */
+void svga_blit(const uint8_t *src) {
+    fb_write(0, src, (uint32_t)SVGA_WIDTH * SVGA_HEIGHT);
+}
+
 /* Copy a linear range within the framebuffer. Safe for forward (dst < src)
    copies via a one-scanline RAM bounce buffer (read and write banks can't
    differ in single-bank Cirrus mode). */

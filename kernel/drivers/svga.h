@@ -27,4 +27,7 @@ const uint8_t *svga_rom_font(void);
 /* Copy a linear range within the banked framebuffer (handles 64 KB banks). */
 void svga_copy(uint32_t dst_off, uint32_t src_off, uint32_t count);
 
+/* Blit a full-screen RAM back buffer to the framebuffer in one pass. */
+void svga_blit(const uint8_t *src);
+
 #endif

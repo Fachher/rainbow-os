@@ -53,6 +53,11 @@ static bool ctrl_held;
 static bool extended;
 static volatile bool key_pressed;
 
+/* Held-key state for real-time input (games): indexed by raw scancode.
+   key_down for normal keys, ext_down for E0-prefixed keys (arrows). */
+static volatile uint8_t key_down[128];
+static volatile uint8_t ext_down[128];
+
 static void kbd_push(int key) {
     uint8_t next = (kbd_head + 1) % KBD_BUF_SIZE;
     if (next != kbd_tail) {
@@ -75,8 +80,12 @@ static void keyboard_irq_handler(struct isr_frame *frame) {
     if (extended) {
         extended = false;
 
-        /* Extended key release — ignore */
-        if (scancode & 0x80) return;
+        /* Track held state for extended keys (arrows). */
+        if (scancode & 0x80) {
+            ext_down[scancode & 0x7F] = 0;
+            return;
+        }
+        ext_down[scancode & 0x7F] = 1;
 
         int key = 0;
         switch (scancode) {
@@ -100,10 +109,13 @@ static void keyboard_irq_handler(struct isr_frame *frame) {
     /* Key release (bit 7 set) */
     if (scancode & 0x80) {
         uint8_t released = scancode & 0x7F;
+        key_down[released] = 0;
         if (released == 0x2A || released == 0x36) shift_held = false;
         if (released == 0x1D) ctrl_held = false;
         return;
     }
+
+    key_down[scancode & 0x7F] = 1;
 
     /* Modifier press */
     if (scancode == 0x2A || scancode == 0x36) { shift_held = true; return; }
@@ -165,4 +177,16 @@ void keyboard_wait_any(void) {
     key_pressed = false;
     while (!key_pressed)
         __asm__ volatile("sti; hlt");
+}
+
+bool keyboard_is_down(uint8_t scancode) {
+    return key_down[scancode & 0x7F] != 0;
+}
+
+bool keyboard_is_ext_down(uint8_t scancode) {
+    return ext_down[scancode & 0x7F] != 0;
+}
+
+void keyboard_flush(void) {
+    kbd_tail = kbd_head;
 }

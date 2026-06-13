@@ -17,11 +17,13 @@ set(KERNEL_SOURCES
     kernel/drivers/serial.c
     kernel/drivers/keyboard.c
     kernel/drivers/svga.c
+    kernel/drivers/timer.c
     kernel/drivers/ata.c
     kernel/fs/fat12.c
     kernel/fs/ramdisk.c
     kernel/fs/diskfs.c
     kernel/shell/shell.c
+    kernel/game/asteroids.c
     kernel/lib/string.c
     kernel/editor/buffer.c
     kernel/editor/view.c
@@ -49,6 +51,7 @@ target_include_directories(kernel.elf PRIVATE
     ${CMAKE_SOURCE_DIR}/kernel/drivers
     ${CMAKE_SOURCE_DIR}/kernel/fs
     ${CMAKE_SOURCE_DIR}/kernel/shell
+    ${CMAKE_SOURCE_DIR}/kernel/game
     ${CMAKE_SOURCE_DIR}/kernel/lib
     ${CMAKE_SOURCE_DIR}/kernel/editor
     ${CMAKE_SOURCE_DIR}/kernel/basic
