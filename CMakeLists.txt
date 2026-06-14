@@ -28,9 +28,6 @@ set(KERNEL_SOURCES
     kernel/debug/debugger.c
     kernel/debug/disasm.c
     kernel/lib/string.c
-    kernel/editor/buffer.c
-    kernel/editor/view.c
-    kernel/editor/editor.c
     kernel/basic/program.c
     kernel/basic/tokenizer.c
     kernel/basic/vars.c
@@ -57,7 +54,6 @@ target_include_directories(kernel.elf PRIVATE
     ${CMAKE_SOURCE_DIR}/kernel/game
     ${CMAKE_SOURCE_DIR}/kernel/debug
     ${CMAKE_SOURCE_DIR}/kernel/lib
-    ${CMAKE_SOURCE_DIR}/kernel/editor
     ${CMAKE_SOURCE_DIR}/kernel/basic
     ${CMAKE_SOURCE_DIR}/kernel/cc
 )
@@ -99,6 +95,8 @@ add_custom_target(userapps ALL
         ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} invaders
     COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/build-userapp.sh
         ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} asteroids
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/build-userapp.sh
+        ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} editor -O0   # editor relies on -O0 (kernel default)
     COMMENT "Building userland apps"
 )
 
@@ -112,6 +110,8 @@ add_custom_target(rootfs ALL
         ${CMAKE_BINARY_DIR}/invaders.bin ::invaders.bin
     COMMAND mcopy -i ${CMAKE_BINARY_DIR}/rootfs.img
         ${CMAKE_BINARY_DIR}/asteroids.bin ::asteroid.bin   # 8.3: "asteroids" > 8 chars
+    COMMAND mcopy -i ${CMAKE_BINARY_DIR}/rootfs.img
+        ${CMAKE_BINARY_DIR}/editor.bin ::editor.bin
     COMMENT "Creating FAT12 filesystem image"
 )
 

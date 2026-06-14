@@ -24,13 +24,23 @@
 #define SYS_YIELD       13
 #define SYS_CLEAR       14
 #define SYS_KBFLUSH     15
-#define SYS_COUNT       16
+/* console cells / file I/O / argument (for the editor and other apps) */
+#define SYS_PUTAT       16
+#define SYS_SETCUR      17
+#define SYS_DIMS        18
+#define SYS_READFILE    19
+#define SYS_WRITEFILE   20
+#define SYS_GETARG      21
+#define SYS_COUNT       22
 
 /* Initialize syscall table */
 void runtime_init(void);
 
 /* Execute a flat binary from ramdisk */
 void prog_exec(const char *filename);
+
+/* Stash the command-line argument for the next program (read via SYS_GETARG). */
+void prog_set_arg(const char *arg);
 
 /* Load a flat binary to CG_LOAD_ADDR, install the exit stub and seed the user
    stack. Returns the initial user ESP, or 0 on failure (e.g. file not found).

@@ -9,6 +9,15 @@
 #include "include/paging.h"
 #include "drivers/timer.h"
 #include "drivers/svga.h"
+#include "fs/diskfs.h"
+
+/* Command-line argument for the running program (SYS_GETARG). */
+static char prog_arg[64];
+void prog_set_arg(const char *arg) {
+    int i = 0;
+    if (arg) while (arg[i] && i < (int)sizeof(prog_arg) - 1) { prog_arg[i] = arg[i]; i++; }
+    prog_arg[i] = '\0';
+}
 
 /* Ring 3 entry/exit (kernel/usermode.asm). saved_kernel_esp must be a global
    (the asm references it). */
@@ -214,6 +223,8 @@ static const uint8_t sys_argc[SYS_COUNT] = {
     [SYS_PEEK] = 1, [SYS_POKE] = 2, [SYS_MEMSET] = 3, [SYS_PRINTF] = 1,
     [SYS_TICKS] = 0, [SYS_KEYDOWN] = 1, [SYS_KEYDOWN_EXT] = 1, [SYS_BLIT] = 1,
     [SYS_GETFONT] = 1, [SYS_YIELD] = 0, [SYS_CLEAR] = 0, [SYS_KBFLUSH] = 0,
+    [SYS_PUTAT] = 5, [SYS_SETCUR] = 2, [SYS_DIMS] = 0, [SYS_READFILE] = 3,
+    [SYS_WRITEFILE] = 3, [SYS_GETARG] = 2,
 };
 
 static void syscall_handler(struct isr_frame *f) {
@@ -239,6 +250,20 @@ static void syscall_handler(struct isr_frame *f) {
         case SYS_YIELD:   sys_yield();                                  break;
         case SYS_CLEAR:   vga_clear();                                  break;
         case SYS_KBFLUSH: keyboard_flush();                            break;
+        case SYS_PUTAT:   vga_putchar_at((uint8_t)a[0], (uint8_t)a[1], (char)a[2],
+                                         (uint8_t)a[3], (uint8_t)a[4]); break;
+        case SYS_SETCUR:  vga_set_cursor((uint8_t)a[0], (uint8_t)a[1]); break;
+        case SYS_DIMS:    f->eax = ((uint32_t)vga_get_rows() << 8) | vga_get_cols(); break;
+        case SYS_READFILE: check_str(a[0]); check_ptr(a[1], a[2]);
+                           f->eax = (uint32_t)fat12_read_file((const char *)a[0],
+                                                 (uint8_t *)a[1], a[2]);  break;
+        case SYS_WRITEFILE: check_str(a[0]); check_ptr(a[1], a[2]);
+                            f->eax = (uint32_t)diskfs_write_file((const char *)a[0],
+                                                 (const uint8_t *)a[1], a[2]); break;
+        case SYS_GETARG: { check_ptr(a[0], a[1]);
+                           char *d = (char *)a[0]; uint32_t m = a[1], i = 0;
+                           while (i + 1 < m && prog_arg[i]) { d[i] = prog_arg[i]; i++; }
+                           if (m) d[i] = '\0'; break; }
         default: break;
     }
 }

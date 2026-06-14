@@ -26,3 +26,9 @@ SYSCALL sys_getfont,     12
 SYSCALL sys_yield,       13
 SYSCALL sys_clear,       14
 SYSCALL sys_kbflush,     15
+SYSCALL sys_putat,       16
+SYSCALL sys_setcur,      17
+SYSCALL sys_dims,        18
+SYSCALL sys_readfile,    19
+SYSCALL sys_writefile,   20
+SYSCALL sys_getarg,      21

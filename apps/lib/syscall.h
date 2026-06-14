@@ -19,6 +19,14 @@ void     sys_yield(void);                  /* idle until the next interrupt */
 void     sys_clear(void);                  /* clear/repaint the text console */
 void     sys_kbflush(void);
 
+/* console / file / arg syscalls (used by oscompat.c shims and apps) */
+void     sys_putat(int row, int col, int ch, int fg, int bg);
+void     sys_setcur(int row, int col);
+uint32_t sys_dims(void);                          /* (rows<<8)|cols */
+int      sys_readfile(const char *name, uint8_t *buf, uint32_t max);
+int      sys_writefile(const char *name, const uint8_t *data, uint32_t size);
+void     sys_getarg(char *buf, int max);          /* command-line argument */
+
 /* tiny libc (umem.c) */
 void *memset(void *dst, int val, size_t n);
 void *memcpy(void *dst, const void *src, size_t n);

@@ -14,3 +14,22 @@ void *memcpy(void *dst, const void *src, size_t n) {
     while (n--) *d++ = *s++;
     return dst;
 }
+
+size_t strlen(const char *s) {
+    size_t n = 0;
+    while (s[n]) n++;
+    return n;
+}
+
+int strcmp(const char *a, const char *b) {
+    while (*a && *a == *b) { a++; b++; }
+    return (int)(uint8_t)*a - (int)(uint8_t)*b;
+}
+
+int strncmp(const char *a, const char *b, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        if (a[i] != b[i]) return (int)(uint8_t)a[i] - (int)(uint8_t)b[i];
+        if (!a[i]) return 0;
+    }
+    return 0;
+}

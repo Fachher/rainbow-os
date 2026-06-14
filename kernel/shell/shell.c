@@ -7,7 +7,6 @@
 #include "fs/diskfs.h"
 #include "drivers/svga.h"
 #include "drivers/keyboard.h"
-#include "editor/editor.h"
 #include "basic/basic.h"
 #include "cc/cc.h"
 #include "cc/runtime.h"
@@ -21,7 +20,7 @@ static char cmd_buf[CMD_MAX_LEN + 1];
 static uint32_t cmd_len;
 
 static const char *const shell_commands[] = {
-    "help", "clear", "version", "meminfo", "ls", "cat", "edit", "rm",
+    "help", "clear", "version", "meminfo", "ls", "cat", "rm",
     "sync", "basic", "cc", "run", "debug", "gfx", "reboot", "shutdown", 0
 };
 
@@ -42,7 +41,6 @@ static void shell_execute(const char *cmd) {
         vga_write("  meminfo   - Show memory usage\n");
         vga_write("  ls        - List files\n");
         vga_write("  cat FILE  - Show file contents\n");
-        vga_write("  edit      - Text editor (vim-like)\n");
         vga_write("  rm FILE   - Delete a file\n");
         vga_write("  sync      - Flush filesystem to disk\n");
         vga_write("  basic     - BASIC interpreter\n");
@@ -163,12 +161,6 @@ static void shell_execute(const char *cmd) {
         vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
         vga_write("[OK] Returned to console\n");
         vga_set_color(VGA_WHITE, VGA_BLACK);
-    } else if (strcmp(cmd, "edit") == 0) {
-        editor_open((const char *)0);
-    } else if (strncmp(cmd, "edit ", 5) == 0) {
-        const char *fname = cmd + 5;
-        while (*fname == ' ') fname++;
-        editor_open(fname);
     } else if (strcmp(cmd, "basic") == 0) {
         basic_run();
     } else if (strncmp(cmd, "basic ", 6) == 0) {
@@ -195,12 +187,20 @@ static void shell_execute(const char *cmd) {
             cc_compile(fname);
         }
     } else if (strncmp(cmd, "run ", 4) == 0) {
-        const char *fname = cmd + 4;
-        while (*fname == ' ') fname++;
-        if (*fname == '\0') {
-            vga_write("Usage: run <filename.bin>\n");
+        const char *p = cmd + 4;
+        while (*p == ' ') p++;
+        /* Split "name.bin [arg]" into the program name and its argument. */
+        char name[32];
+        int n = 0;
+        while (p[n] && p[n] != ' ' && n < 31) { name[n] = p[n]; n++; }
+        name[n] = '\0';
+        const char *arg = p + n;
+        while (*arg == ' ') arg++;
+        if (name[0] == '\0') {
+            vga_write("Usage: run <filename.bin> [arg]\n");
         } else {
-            prog_exec(fname);
+            prog_set_arg(arg);
+            prog_exec(name);
         }
     } else if (strncmp(cmd, "debug ", 6) == 0) {
         const char *fname = cmd + 6;
