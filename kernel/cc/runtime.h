@@ -23,4 +23,15 @@ void runtime_init(void);
 /* Execute a flat binary from ramdisk */
 void prog_exec(const char *filename);
 
+/* Load a flat binary to CG_LOAD_ADDR, install the exit stub and seed the user
+   stack. Returns the initial user ESP, or 0 on failure (e.g. file not found).
+   Shared by prog_exec and the debugger. */
+uint32_t prog_load(const char *filename);
+
+/* Ring 3 entry / exit (kernel/usermode.asm) and the fault-kill path
+   (cc/runtime.c) — used by the debugger to run and stop a program. */
+void enter_user(uint32_t entry_eip, uint32_t user_esp);
+void return_to_kernel(void);
+void prog_fault(const char *reason);
+
 #endif

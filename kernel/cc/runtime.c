@@ -221,7 +221,9 @@ void runtime_init(void) {
     register_interrupt_handler(13, gpf_handler);   /* general protection fault */
 }
 
-void prog_exec(const char *filename) {
+/* Load a flat binary to CG_LOAD_ADDR, install the ring-3 exit stub, and seed the
+   user stack. Returns the initial user ESP, or 0 on failure. */
+uint32_t prog_load(const char *filename) {
     static uint8_t file_buf[CG_CODE_MAX + CG_STRING_MAX + CG_DATA_MAX];
 
     int bytes = fat12_read_file(filename, file_buf, sizeof(file_buf));
@@ -231,38 +233,42 @@ void prog_exec(const char *filename) {
         vga_set_color(15, 0);
         vga_write(filename);
         vga_putchar('\n');
-        return;
+        return 0;
     }
 
-    serial_write("Executing: ");
-    serial_write(filename);
-    serial_write("\n");
-
     /* Copy to execution address */
-    uint8_t *exec_addr = (uint8_t *)CG_LOAD_ADDR;
-    memcpy(exec_addr, file_buf, bytes);
+    memcpy((uint8_t *)CG_LOAD_ADDR, file_buf, bytes);
 
     /* Exit stub in user memory: push 0; mov ebx,esp; mov eax,SYS_EXIT; int 0x80.
        main()'s RET lands here when the program returns instead of calling exit(). */
-    uint8_t *stub = (uint8_t *)USER_EXIT_STUB;
     static const uint8_t stub_code[] = {
         0x6A, 0x00,                         /* push 0            */
         0x89, 0xE3,                         /* mov ebx, esp      */
         0xB8, SYS_EXIT, 0x00, 0x00, 0x00,   /* mov eax, SYS_EXIT */
         0xCD, 0x80,                         /* int 0x80          */
     };
-    memcpy(stub, stub_code, sizeof(stub_code));
+    memcpy((uint8_t *)USER_EXIT_STUB, stub_code, sizeof(stub_code));
 
     /* User stack: top dword = return address (the exit stub) for main()'s RET. */
     uint32_t *ustack = (uint32_t *)(USER_STACK_TOP - 4);
     *ustack = USER_EXIT_STUB;
+    return (uint32_t)ustack;
+}
+
+void prog_exec(const char *filename) {
+    uint32_t user_esp = prog_load(filename);
+    if (!user_esp) return;
+
+    serial_write("Executing: ");
+    serial_write(filename);
+    serial_write("\n");
 
     prog_exited = 0;
     prog_exit_code = 0;
 
     /* Drop to ring 3 at the program entry. Returns here (via return_to_kernel)
        when the program calls exit(), returns from main, or faults. */
-    enter_user(CG_LOAD_ADDR, (uint32_t)ustack);
+    enter_user(CG_LOAD_ADDR, user_esp);
 
     serial_write("Program exited with code ");
     serial_putchar('0' + (prog_exit_code % 10));

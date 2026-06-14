@@ -27,6 +27,8 @@ set(KERNEL_SOURCES
     kernel/shell/shell.c
     kernel/game/asteroids.c
     kernel/game/space_invaders.c
+    kernel/debug/debugger.c
+    kernel/debug/disasm.c
     kernel/lib/string.c
     kernel/editor/buffer.c
     kernel/editor/view.c
@@ -55,6 +57,7 @@ target_include_directories(kernel.elf PRIVATE
     ${CMAKE_SOURCE_DIR}/kernel/fs
     ${CMAKE_SOURCE_DIR}/kernel/shell
     ${CMAKE_SOURCE_DIR}/kernel/game
+    ${CMAKE_SOURCE_DIR}/kernel/debug
     ${CMAKE_SOURCE_DIR}/kernel/lib
     ${CMAKE_SOURCE_DIR}/kernel/editor
     ${CMAKE_SOURCE_DIR}/kernel/basic

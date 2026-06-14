@@ -13,6 +13,7 @@
 #include "cc/runtime.h"
 #include "game/asteroids.h"
 #include "game/space_invaders.h"
+#include "debug/debugger.h"
 #include "include/io.h"
 
 #define CMD_MAX_LEN 78
@@ -23,7 +24,7 @@ static uint32_t cmd_len;
 
 static const char *const shell_commands[] = {
     "help", "clear", "version", "meminfo", "ls", "cat", "edit", "rm",
-    "sync", "basic", "cc", "run", "gfx", "asteroids", "invaders", "reboot", "shutdown", 0
+    "sync", "basic", "cc", "run", "debug", "gfx", "asteroids", "invaders", "reboot", "shutdown", 0
 };
 
 static void shell_prompt(void) {
@@ -50,6 +51,7 @@ static void shell_execute(const char *cmd) {
         vga_write("  cc FILE   - Compile C file\n");
         vga_write("  cc FILE -r - Compile and run\n");
         vga_write("  run FILE  - Execute binary\n");
+        vga_write("  debug FILE - Debug a binary (breakpoints/step)\n");
         vga_write("  gfx       - Graphics demo (800x600)\n");
         vga_write("  asteroids - Play Asteroids\n");
         vga_write("  invaders  - Play Space Invaders\n");
@@ -207,6 +209,14 @@ static void shell_execute(const char *cmd) {
             vga_write("Usage: run <filename.bin>\n");
         } else {
             prog_exec(fname);
+        }
+    } else if (strncmp(cmd, "debug ", 6) == 0) {
+        const char *fname = cmd + 6;
+        while (*fname == ' ') fname++;
+        if (*fname == '\0') {
+            vga_write("Usage: debug <filename.bin>\n");
+        } else {
+            debugger_run(fname);
         }
     } else if (strcmp(cmd, "sync") == 0) {
         if (diskfs_sync() == 0) {
