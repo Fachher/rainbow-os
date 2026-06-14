@@ -15,7 +15,16 @@
 #define SYS_POKE        5
 #define SYS_MEMSET      6
 #define SYS_PRINTF      7
-#define SYS_COUNT        8
+/* graphics / input / timing (ring-3 games) */
+#define SYS_TICKS       8
+#define SYS_KEYDOWN     9
+#define SYS_KEYDOWN_EXT 10
+#define SYS_BLIT        11
+#define SYS_GETFONT     12
+#define SYS_YIELD       13
+#define SYS_CLEAR       14
+#define SYS_KBFLUSH     15
+#define SYS_COUNT       16
 
 /* Initialize syscall table */
 void runtime_init(void);

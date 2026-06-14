@@ -7,6 +7,8 @@
 #include "cc/codegen.h"
 #include "include/idt.h"
 #include "include/paging.h"
+#include "drivers/timer.h"
+#include "drivers/svga.h"
 
 /* Ring 3 entry/exit (kernel/usermode.asm). saved_kernel_esp must be a global
    (the asm references it). */
@@ -72,6 +74,21 @@ static void sys_poke(int addr, int val) {
 
 static void sys_memset_wrap(void *dst, int val, int n) {
     memset(dst, val, (size_t)n);
+}
+
+/* --- graphics / input / timing syscalls (for ring-3 games) ------------- */
+static void sys_blit(const uint8_t *buf) {
+    svga_blit(buf);
+}
+
+static void sys_getfont(uint8_t *dst) {
+    memcpy(dst, svga_rom_font(), 4096);
+}
+
+static void sys_yield(void) {
+    /* The int 0x80 gate cleared IF; re-enable before halting or the timer IRQ
+       can never wake us. */
+    __asm__ volatile("sti; hlt");
 }
 
 static void print_dec(int val) {
@@ -195,6 +212,8 @@ static void gpf_handler(struct isr_frame *f) {
 static const uint8_t sys_argc[SYS_COUNT] = {
     [SYS_PUTCHAR] = 1, [SYS_GETCHAR] = 0, [SYS_PUTS] = 1, [SYS_EXIT] = 1,
     [SYS_PEEK] = 1, [SYS_POKE] = 2, [SYS_MEMSET] = 3, [SYS_PRINTF] = 1,
+    [SYS_TICKS] = 0, [SYS_KEYDOWN] = 1, [SYS_KEYDOWN_EXT] = 1, [SYS_BLIT] = 1,
+    [SYS_GETFONT] = 1, [SYS_YIELD] = 0, [SYS_CLEAR] = 0, [SYS_KBFLUSH] = 0,
 };
 
 static void syscall_handler(struct isr_frame *f) {
@@ -212,6 +231,14 @@ static void syscall_handler(struct isr_frame *f) {
         case SYS_POKE:    check_ptr(a[0], 1); sys_poke((int)a[0], (int)a[1]); break;
         case SYS_MEMSET:  check_ptr(a[0], a[2]); sys_memset_wrap((void *)a[0], (int)a[1], (int)a[2]); break;
         case SYS_PRINTF:  check_str(a[0]); f->eax = (uint32_t)do_printf((const char *)a[0], &a[1]); break;
+        case SYS_TICKS:   f->eax = timer_ticks();                       break;
+        case SYS_KEYDOWN: f->eax = (uint32_t)keyboard_is_down((uint8_t)a[0]); break;
+        case SYS_KEYDOWN_EXT: f->eax = (uint32_t)keyboard_is_ext_down((uint8_t)a[0]); break;
+        case SYS_BLIT:    check_ptr(a[0], (uint32_t)SVGA_WIDTH * SVGA_HEIGHT); sys_blit((const uint8_t *)a[0]); break;
+        case SYS_GETFONT: check_ptr(a[0], 4096); sys_getfont((uint8_t *)a[0]); break;
+        case SYS_YIELD:   sys_yield();                                  break;
+        case SYS_CLEAR:   vga_clear();                                  break;
+        case SYS_KBFLUSH: keyboard_flush();                            break;
         default: break;
     }
 }
@@ -224,7 +251,7 @@ void runtime_init(void) {
 /* Load a flat binary to CG_LOAD_ADDR, install the ring-3 exit stub, and seed the
    user stack. Returns the initial user ESP, or 0 on failure. */
 uint32_t prog_load(const char *filename) {
-    static uint8_t file_buf[CG_CODE_MAX + CG_STRING_MAX + CG_DATA_MAX];
+    static uint8_t file_buf[65536];   /* host-built user apps can exceed cc output */
 
     int bytes = fat12_read_file(filename, file_buf, sizeof(file_buf));
     if (bytes < 0) {

@@ -26,7 +26,6 @@ set(KERNEL_SOURCES
     kernel/fs/diskfs.c
     kernel/shell/shell.c
     kernel/game/asteroids.c
-    kernel/game/space_invaders.c
     kernel/debug/debugger.c
     kernel/debug/disasm.c
     kernel/lib/string.c
@@ -95,11 +94,21 @@ add_custom_target(floppy ALL
     COMMENT "Creating floppy image"
 )
 
-# --- FAT12 filesystem image ---
+# --- Userland apps (ring-3 programs, not linked into the kernel) ---
+add_custom_target(userapps ALL
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/build-userapp.sh
+        ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} invaders
+    COMMENT "Building userland apps"
+)
+
+# --- FAT12 filesystem image (rootfs/ files + built user apps) ---
 add_custom_target(rootfs ALL
+    DEPENDS userapps
     COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/mkfs-fat12.sh
         ${CMAKE_SOURCE_DIR}/rootfs
         ${CMAKE_BINARY_DIR}/rootfs.img
+    COMMAND mcopy -i ${CMAKE_BINARY_DIR}/rootfs.img
+        ${CMAKE_BINARY_DIR}/invaders.bin ::invaders.bin
     COMMENT "Creating FAT12 filesystem image"
 )
 

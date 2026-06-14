@@ -1,19 +1,14 @@
-/* Space Invaders — a grid-based game for the 800x600x8bpp graphical console.
+/* Space Invaders — a ring-3 user program for Rainbow-OS.
  *
- * Same architecture as asteroids.c: draw into a RAM back buffer and blit once
- * per frame, paced by the PIT timer, held-key input from the keyboard driver.
- * All integer math. */
+ * Ported from the in-kernel version: draws into its own RAM back buffer and
+ * reaches the kernel only through syscalls (blit, ticks, keydown, getfont,
+ * yield, clear). Pure integer math. */
 
-#include "space_invaders.h"
-#include "drivers/svga.h"
-#include "drivers/keyboard.h"
-#include "drivers/vga.h"
-#include "drivers/timer.h"
-#include "lib/string.h"
-#include "include/types.h"
+#include "syscall.h"
+#include "types.h"
 
-#define W           SVGA_WIDTH
-#define H           SVGA_HEIGHT
+#define W           800
+#define H           600
 #define FRAME_TICKS 3                 /* ~33 fps */
 
 /* Colors (console palette 0-15) */
@@ -38,10 +33,10 @@
 #define ROWS   5
 #define COLS   11
 #define SCALE  3
-#define INV_W  11                    /* sprite bit width  */
-#define INV_H  8                     /* sprite rows       */
-#define INV_PW (INV_W * SCALE)       /* 33 px */
-#define INV_PH (INV_H * SCALE)       /* 24 px */
+#define INV_W  11
+#define INV_H  8
+#define INV_PW (INV_W * SCALE)
+#define INV_PH (INV_H * SCALE)
 #define CELL_W 48
 #define CELL_H 40
 #define STEP_X 14
@@ -54,24 +49,19 @@
 #define BLOCK 8
 
 static uint8_t back[W * H];
+static uint8_t font[4096];            /* filled via sys_getfont at startup */
 
 static uint32_t rng = 0x51a9c3e7;
 static uint32_t rnd(void) { rng = rng * 1103515245u + 12345u; return (rng >> 16) & 0x7FFF; }
 
 /* ---- Sprites (11 wide x 8 tall, 2 animation frames, 3 types) ----------- */
 static const uint16_t inv_sprite[3][2][INV_H] = {
-  { /* type 0 (top, 30 pts) */
-    { 0x070,0x1FC,0x3FE,0x6DB,0x7FF,0x1DC,0x186,0x0D8 },
-    { 0x070,0x1FC,0x3FE,0x6DB,0x7FF,0x124,0x2FA,0x603 },
-  },
-  { /* type 1 (middle, 20 pts) */
-    { 0x104,0x088,0x1FC,0x376,0x7FF,0x5FD,0x505,0x0D8 },
-    { 0x104,0x489,0x5FD,0x777,0x7FF,0x3FE,0x104,0x202 },
-  },
-  { /* type 2 (bottom, 10 pts) */
-    { 0x0F8,0x3FE,0x7FF,0x727,0x7FF,0x0D8,0x18C,0x306 },
-    { 0x0F8,0x3FE,0x7FF,0x727,0x7FF,0x1FC,0x326,0x0D8 },
-  },
+  { { 0x070,0x1FC,0x3FE,0x6DB,0x7FF,0x1DC,0x186,0x0D8 },
+    { 0x070,0x1FC,0x3FE,0x6DB,0x7FF,0x124,0x2FA,0x603 } },
+  { { 0x104,0x088,0x1FC,0x376,0x7FF,0x5FD,0x505,0x0D8 },
+    { 0x104,0x489,0x5FD,0x777,0x7FF,0x3FE,0x104,0x202 } },
+  { { 0x0F8,0x3FE,0x7FF,0x727,0x7FF,0x0D8,0x18C,0x306 },
+    { 0x0F8,0x3FE,0x7FF,0x727,0x7FF,0x1FC,0x326,0x0D8 } },
 };
 
 #define PLW 13
@@ -80,7 +70,7 @@ static const uint16_t cannon[INV_H] = {
 };
 
 /* ---- Drawing into the back buffer -------------------------------------- */
-static inline void px(int x, int y, uint8_t c) {
+static void px(int x, int y, uint8_t c) {
     if ((unsigned)x < (unsigned)W && (unsigned)y < (unsigned)H) back[y * W + x] = c;
 }
 
@@ -90,7 +80,7 @@ static void gfill(int x, int y, int w, int h, uint8_t c) {
 }
 
 static void gchar(int x, int y, char ch, uint8_t c) {
-    const uint8_t *g = svga_rom_font() + (uint32_t)(uint8_t)ch * 16;
+    const uint8_t *g = font + (uint32_t)(uint8_t)ch * 16;
     for (int row = 0; row < 16; row++)
         for (int col = 0; col < 8; col++)
             if (g[row] & (0x80 >> col)) px(x + col, y + row, c);
@@ -111,10 +101,9 @@ static void gsprite(int x, int y, const uint16_t *rows, int nrows, int ncols,
                     int scale, uint8_t c) {
     for (int r = 0; r < nrows; r++) {
         uint16_t bits = rows[r];
-        for (int col = 0; col < ncols; col++) {
+        for (int col = 0; col < ncols; col++)
             if (bits & (1 << (ncols - 1 - col)))
                 gfill(x + col * scale, y + r * scale, scale, scale, c);
-        }
     }
 }
 
@@ -127,7 +116,7 @@ static struct { int x, y, active; } bombs[MAX_BOMBS];
 static uint8_t bunk[NBUNK][BUNK_ROWS][BUNK_COLS];
 static int score, lives, wave, bomb_timer;
 
-static const uint8_t row_type[ROWS]   = { 0, 1, 1, 2, 2 };
+static const uint8_t row_type[ROWS]    = { 0, 1, 1, 2, 2 };
 static const int      row_points[ROWS] = { 30, 20, 20, 10, 10 };
 static const uint8_t  row_color[ROWS]  = { C_CYAN, C_GREEN, C_GREEN, C_YELLOW, C_YELLOW };
 
@@ -151,7 +140,6 @@ static void init_bunkers(void) {
     for (int b = 0; b < NBUNK; b++)
         for (int r = 0; r < BUNK_ROWS; r++)
             for (int c = 0; c < BUNK_COLS; c++) {
-                /* carve a small arch in the bottom-center */
                 int hole = (r >= BUNK_ROWS - 2 && c >= 3 && c <= 4);
                 bunk[b][r][c] = hole ? 0 : 1;
             }
@@ -177,7 +165,6 @@ static void init_wave(void) {
     bomb_timer = 40;
 }
 
-/* fleet pixel extents over alive invaders */
 static void fleet_bounds(int *left, int *right, int *bottom) {
     int minc = COLS, maxc = -1, maxr = -1;
     for (int r = 0; r < ROWS; r++)
@@ -193,7 +180,6 @@ static void fleet_bounds(int *left, int *right, int *bottom) {
 }
 
 static void spawn_bomb(void) {
-    /* pick a random column, drop from its lowest alive invader */
     int c = rnd() % COLS;
     for (int tries = 0; tries < COLS; tries++) {
         int lr = -1;
@@ -211,7 +197,6 @@ static void spawn_bomb(void) {
     }
 }
 
-/* remove a bunker block at pixel (x,y); returns 1 if something was hit */
 static int hit_bunker(int x, int y) {
     for (int b = 0; b < NBUNK; b++) {
         int bxp = bunk_x(b);
@@ -233,7 +218,6 @@ static void reset_player(void) {
 static void render(int frame) {
     memset(back, C_BLACK, sizeof(back));
 
-    /* invaders */
     for (int r = 0; r < ROWS; r++)
         for (int c = 0; c < COLS; c++)
             if (alive[r][c])
@@ -241,7 +225,6 @@ static void render(int frame) {
                         inv_sprite[row_type[r]][anim], INV_H, INV_W, SCALE,
                         row_color[r]);
 
-    /* bunkers */
     for (int b = 0; b < NBUNK; b++) {
         int bxp = bunk_x(b);
         for (int r = 0; r < BUNK_ROWS; r++)
@@ -250,27 +233,25 @@ static void render(int frame) {
                     gfill(bxp + c * BLOCK, BUNK_Y + r * BLOCK, BLOCK, BLOCK, C_GREEN);
     }
 
-    /* player (blink while invulnerable) */
     if (!(player_invuln > 0 && (frame & 4)))
         gsprite(player_x, PLAYER_Y, cannon, INV_H, PLW, SCALE, C_WHITE);
 
-    /* bullet + bombs */
     if (bullet_active) gfill(bx, by, 3, 14, C_WHITE);
     for (int i = 0; i < MAX_BOMBS; i++)
         if (bombs[i].active) gfill(bombs[i].x - 1, bombs[i].y, 3, 10, C_RED);
 
-    /* ground line + HUD */
     gfill(0, PLAYER_Y + INV_PH + 6, W, 2, C_GREEN);
     gtext(10, 8, "SCORE", C_WHITE);   gnum(58, 8, score, C_WHITE);
     gtext(W / 2 - 28, 8, "WAVE", C_WHITE); gnum(W / 2 + 12, 8, wave, C_WHITE);
     gtext(W - 110, 8, "LIVES", C_WHITE); gnum(W - 38, 8, lives, C_WHITE);
 
-    svga_blit(back);
+    sys_blit(back);
 }
 
-/* ---- Main loop --------------------------------------------------------- */
-void invaders_run(void) {
-    rng ^= timer_ticks() * 2654435761u + 1;
+/* ---- Main -------------------------------------------------------------- */
+int main(void) {
+    sys_getfont(font);
+    rng ^= sys_ticks() * 2654435761u + 1;
     score = 0; lives = 3; wave = 1;
     init_bunkers();
     init_wave();
@@ -278,22 +259,21 @@ void invaders_run(void) {
     player_invuln = 0;
 
     int fire_cd = 0, frame = 0, running = 1, gameover = 0;
-    uint32_t last = timer_ticks();
+    uint32_t last = sys_ticks();
 
     while (running) {
-        while (timer_ticks() - last < FRAME_TICKS) __asm__ volatile("hlt");
+        while (sys_ticks() - last < FRAME_TICKS) sys_yield();
         last += FRAME_TICKS;
         frame++;
 
-        /* input */
-        if (keyboard_is_down(SC_Q) || keyboard_is_down(SC_ESC)) break;
+        if (sys_keydown(SC_Q) || sys_keydown(SC_ESC)) break;
         int pmax = W - 20 - PLW * SCALE;
-        if (keyboard_is_down(SC_A) || keyboard_is_ext_down(EXT_LEFT))  player_x -= 7;
-        if (keyboard_is_down(SC_D) || keyboard_is_ext_down(EXT_RIGHT)) player_x += 7;
+        if (sys_keydown(SC_A) || sys_keydown_ext(EXT_LEFT))  player_x -= 7;
+        if (sys_keydown(SC_D) || sys_keydown_ext(EXT_RIGHT)) player_x += 7;
         if (player_x < 20) player_x = 20;
         if (player_x > pmax) player_x = pmax;
         if (fire_cd > 0) fire_cd--;
-        if (keyboard_is_down(SC_SPACE) && !bullet_active && fire_cd == 0) {
+        if (sys_keydown(SC_SPACE) && !bullet_active && fire_cd == 0) {
             bullet_active = 1;
             bx = player_x + (PLW * SCALE) / 2 - 1;
             by = PLAYER_Y - 14;
@@ -301,28 +281,19 @@ void invaders_run(void) {
         }
         if (player_invuln > 0) player_invuln--;
 
-        /* fleet march */
         if (--step_timer <= 0) {
             step_timer = step_interval();
             anim ^= 1;
             int left, right, bottom;
             fleet_bounds(&left, &right, &bottom);
-            if (fleet_dir > 0 && right + STEP_X > W - 20) {
-                fleet_y += STEP_Y; fleet_dir = -1;
-            } else if (fleet_dir < 0 && left - STEP_X < 20) {
-                fleet_y += STEP_Y; fleet_dir = 1;
-            } else {
-                fleet_x += fleet_dir * STEP_X;
-            }
+            if (fleet_dir > 0 && right + STEP_X > W - 20) { fleet_y += STEP_Y; fleet_dir = -1; }
+            else if (fleet_dir < 0 && left - STEP_X < 20) { fleet_y += STEP_Y; fleet_dir = 1; }
+            else { fleet_x += fleet_dir * STEP_X; }
             fleet_bounds(&left, &right, &bottom);
             if (bottom >= PLAYER_Y) { running = 0; gameover = 1; }
         }
 
-        /* bombs */
-        if (--bomb_timer <= 0) {
-            bomb_timer = 25 + (rnd() % 30);
-            spawn_bomb();
-        }
+        if (--bomb_timer <= 0) { bomb_timer = 25 + (rnd() % 30); spawn_bomb(); }
         for (int i = 0; i < MAX_BOMBS; i++) {
             if (!bombs[i].active) continue;
             bombs[i].y += 6;
@@ -337,7 +308,6 @@ void invaders_run(void) {
             }
         }
 
-        /* player bullet */
         if (bullet_active) {
             by -= 12;
             if (by < 0) bullet_active = 0;
@@ -369,16 +339,12 @@ void invaders_run(void) {
         gtext(W / 2 - 60, H / 2, "SCORE", C_WHITE);
         gnum(W / 2 - 60 + 48, H / 2, score, C_WHITE);
         gtext(W / 2 - 84, H / 2 + 40, "PRESS A KEY TO RETURN", C_GREY);
-        svga_blit(back);
-        keyboard_flush();
-        keyboard_getchar();
+        sys_blit(back);
+        sys_kbflush();
+        sys_getchar();
     }
 
-    keyboard_flush();
-    vga_clear();
-    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-    vga_write("[OK] Returned to console (score ");
-    vga_write_dec((uint32_t)score);
-    vga_write(")\n");
-    vga_set_color(VGA_WHITE, VGA_BLACK);
+    sys_kbflush();
+    sys_clear();
+    return score;
 }
