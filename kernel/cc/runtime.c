@@ -18,6 +18,36 @@ extern void return_to_kernel(void);
    the return address for the program's main(). */
 #define USER_EXIT_STUB 0x2F0000
 
+void prog_fault(const char *reason);   /* fwd: kills the current ring-3 program */
+
+/* --- Syscall pointer validation -----------------------------------------
+   The kernel runs syscalls in ring 0 on the user's behalf, so every pointer a
+   ring-3 program passes must be confined to the user window [BASE, TOP);
+   otherwise a program could make the kernel read/write arbitrary memory. */
+
+static int user_range_ok(uint32_t addr, uint32_t len) {
+    uint32_t end = addr + len;
+    return len == 0 ||
+           (end >= addr &&                       /* no wraparound */
+            addr >= USER_REGION_BASE && end <= USER_REGION_TOP);
+}
+
+/* NUL-terminated string fully inside the window (scan bounded by TOP). */
+static int user_str_ok(uint32_t addr) {
+    if (addr < USER_REGION_BASE || addr >= USER_REGION_TOP) return 0;
+    for (uint32_t p = addr; p < USER_REGION_TOP; p++)
+        if (*(const char *)p == '\0') return 1;
+    return 0;
+}
+
+static void check_ptr(uint32_t addr, uint32_t len) {
+    if (!user_range_ok(addr, len)) prog_fault("bad syscall pointer");
+}
+
+static void check_str(uint32_t addr) {
+    if (!user_str_ok(addr)) prog_fault("bad syscall pointer");
+}
+
 /* Syscall implementations called by user programs */
 
 static void sys_putchar(int c) {
@@ -91,20 +121,25 @@ static void print_hex(uint32_t val) {
     while (--i >= 0) vga_putchar(buf[i]);
 }
 
+static uint32_t next_arg(uint32_t **ap) {
+    check_ptr((uint32_t)*ap, 4);     /* each vararg must be in the user window */
+    return *(*ap)++;
+}
+
 static int do_printf(const char *fmt, uint32_t *ap) {
     while (*fmt) {
         if (*fmt == '%') {
             fmt++;
             switch (*fmt) {
-                case 'd': print_dec((int)*ap++); break;
-                case 'u': print_unsigned(*ap++); break;
-                case 'x': print_hex(*ap++); break;
+                case 'd': print_dec((int)next_arg(&ap)); break;
+                case 'u': print_unsigned(next_arg(&ap)); break;
+                case 'x': print_hex(next_arg(&ap)); break;
                 case 's': {
-                    const char *s = (const char *)*ap++;
-                    if (s) vga_write(s);
+                    uint32_t s = next_arg(&ap);
+                    if (s) { check_str(s); vga_write((const char *)s); }
                     break;
                 }
-                case 'c': vga_putchar((char)*ap++); break;
+                case 'c': vga_putchar((char)next_arg(&ap)); break;
                 case '%': vga_putchar('%'); break;
                 default:
                     vga_putchar('%');
@@ -156,17 +191,27 @@ static void gpf_handler(struct isr_frame *f) {
 /* int 0x80 dispatcher.
    ABI: eax = syscall number, ebx = pointer to the caller's argument block
    (cdecl args on the program's stack). Return value goes back in eax. */
+/* dwords each syscall reads from the argument block */
+static const uint8_t sys_argc[SYS_COUNT] = {
+    [SYS_PUTCHAR] = 1, [SYS_GETCHAR] = 0, [SYS_PUTS] = 1, [SYS_EXIT] = 1,
+    [SYS_PEEK] = 1, [SYS_POKE] = 2, [SYS_MEMSET] = 3, [SYS_PRINTF] = 1,
+};
+
 static void syscall_handler(struct isr_frame *f) {
+    /* ebx is attacker-controlled: validate it covers the args first. */
+    if (f->eax >= SYS_COUNT || !user_range_ok(f->ebx, sys_argc[f->eax] * 4))
+        prog_fault("bad syscall args");          /* does not return */
+
     uint32_t *a = (uint32_t *)f->ebx;
     switch (f->eax) {
         case SYS_PUTCHAR: sys_putchar((int)a[0]);                       break;
         case SYS_GETCHAR: f->eax = (uint32_t)sys_getchar();             break;
-        case SYS_PUTS:    sys_puts((const char *)a[0]);                 break;
+        case SYS_PUTS:    check_str(a[0]); sys_puts((const char *)a[0]); break;
         case SYS_EXIT:    sys_exit((int)a[0]);                          break;
-        case SYS_PEEK:    f->eax = (uint32_t)sys_peek((int)a[0]);       break;
-        case SYS_POKE:    sys_poke((int)a[0], (int)a[1]);               break;
-        case SYS_MEMSET:  sys_memset_wrap((void *)a[0], (int)a[1], (int)a[2]); break;
-        case SYS_PRINTF:  f->eax = (uint32_t)do_printf((const char *)a[0], &a[1]); break;
+        case SYS_PEEK:    check_ptr(a[0], 1); f->eax = (uint32_t)sys_peek((int)a[0]); break;
+        case SYS_POKE:    check_ptr(a[0], 1); sys_poke((int)a[0], (int)a[1]); break;
+        case SYS_MEMSET:  check_ptr(a[0], a[2]); sys_memset_wrap((void *)a[0], (int)a[1], (int)a[2]); break;
+        case SYS_PRINTF:  check_str(a[0]); f->eax = (uint32_t)do_printf((const char *)a[0], &a[1]); break;
         default: break;
     }
 }
