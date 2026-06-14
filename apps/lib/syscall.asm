@@ -32,3 +32,5 @@ SYSCALL sys_dims,        18
 SYSCALL sys_readfile,    19
 SYSCALL sys_writefile,   20
 SYSCALL sys_getarg,      21
+SYSCALL sys_setcolor,    22
+SYSCALL sys_haskey,      23

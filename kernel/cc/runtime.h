@@ -31,7 +31,9 @@
 #define SYS_READFILE    19
 #define SYS_WRITEFILE   20
 #define SYS_GETARG      21
-#define SYS_COUNT       22
+#define SYS_SETCOLOR    22
+#define SYS_HASKEY      23
+#define SYS_COUNT       24
 
 /* Initialize syscall table */
 void runtime_init(void);

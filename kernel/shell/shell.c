@@ -7,7 +7,6 @@
 #include "fs/diskfs.h"
 #include "drivers/svga.h"
 #include "drivers/keyboard.h"
-#include "basic/basic.h"
 #include "cc/cc.h"
 #include "cc/runtime.h"
 #include "debug/debugger.h"
@@ -21,7 +20,7 @@ static uint32_t cmd_len;
 
 static const char *const shell_commands[] = {
     "help", "clear", "version", "meminfo", "ls", "cat", "rm",
-    "sync", "basic", "cc", "run", "debug", "gfx", "reboot", "shutdown", 0
+    "sync", "cc", "run", "debug", "gfx", "reboot", "shutdown", 0
 };
 
 static void shell_prompt(void) {
@@ -43,7 +42,6 @@ static void shell_execute(const char *cmd) {
         vga_write("  cat FILE  - Show file contents\n");
         vga_write("  rm FILE   - Delete a file\n");
         vga_write("  sync      - Flush filesystem to disk\n");
-        vga_write("  basic     - BASIC interpreter\n");
         vga_write("  cc FILE   - Compile C file\n");
         vga_write("  cc FILE -r - Compile and run\n");
         vga_write("  run FILE  - Execute binary\n");
@@ -161,12 +159,6 @@ static void shell_execute(const char *cmd) {
         vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
         vga_write("[OK] Returned to console\n");
         vga_set_color(VGA_WHITE, VGA_BLACK);
-    } else if (strcmp(cmd, "basic") == 0) {
-        basic_run();
-    } else if (strncmp(cmd, "basic ", 6) == 0) {
-        const char *fname = cmd + 6;
-        while (*fname == ' ') fname++;
-        basic_load_and_run(fname);
     } else if (strncmp(cmd, "cc ", 3) == 0) {
         const char *args = cmd + 3;
         while (*args == ' ') args++;

@@ -16,5 +16,8 @@ void    vga_set_cursor(uint8_t row, uint8_t col);
 void    vga_putchar_at(uint8_t row, uint8_t col, char c, uint8_t fg, uint8_t bg);
 uint8_t vga_get_rows(void);
 uint8_t vga_get_cols(void);
+void    vga_putchar(char c);
+void    vga_write(const char *s);
+void    vga_set_color(uint8_t fg, uint8_t bg);
 
 #endif

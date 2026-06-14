@@ -11,4 +11,6 @@ typedef unsigned int   size_t;
 
 /* bool/true/false are built-in keywords under the compiler's default C23 mode. */
 
+#define NULL ((void *)0)
+
 #endif

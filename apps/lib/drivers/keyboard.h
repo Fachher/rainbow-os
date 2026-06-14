@@ -16,6 +16,7 @@
 #define KEY_ESCAPE  0x1B
 #define KEY_CTRL(c) ((c) & 0x1F)
 
-int keyboard_getchar(void);   /* blocking, backed by SYS_GETCHAR */
+int  keyboard_getchar(void);  /* blocking, backed by SYS_GETCHAR */
+bool keyboard_has_key(void);  /* SYS_HASKEY */
 
 #endif

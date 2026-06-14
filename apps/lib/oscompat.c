@@ -18,8 +18,12 @@ void vga_putchar_at(uint8_t row, uint8_t col, char c, uint8_t fg, uint8_t bg) {
 }
 uint8_t vga_get_rows(void) { return (uint8_t)(sys_dims() >> 8); }
 uint8_t vga_get_cols(void) { return (uint8_t)(sys_dims() & 0xFF); }
+void vga_putchar(char c) { sys_putchar((uint8_t)c); }
+void vga_write(const char *s) { sys_puts(s); }
+void vga_set_color(uint8_t fg, uint8_t bg) { sys_setcolor(fg, bg); }
 
 int keyboard_getchar(void) { return sys_getchar(); }
+bool keyboard_has_key(void) { return (bool)sys_haskey(); }
 
 int fat12_read_file(const char *name, uint8_t *buf, uint32_t buf_size) {
     return sys_readfile(name, buf, buf_size);

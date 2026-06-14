@@ -33,3 +33,17 @@ int strncmp(const char *a, const char *b, size_t n) {
     }
     return 0;
 }
+
+char *strcpy(char *dst, const char *src) {
+    char *d = dst;
+    while ((*d++ = *src++)) {}
+    return dst;
+}
+
+void *memmove(void *dst, const void *src, size_t n) {
+    uint8_t *d = (uint8_t *)dst;
+    const uint8_t *s = (const uint8_t *)src;
+    if (d < s) { while (n--) *d++ = *s++; }
+    else { d += n; s += n; while (n--) *--d = *--s; }
+    return dst;
+}

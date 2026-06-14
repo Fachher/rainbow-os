@@ -13,7 +13,9 @@ LD=i686-elf-ld
 OBJCOPY=i686-elf-objcopy
 # -march=i486 matches the kernel: a generic i686 -O2 build emits cmov/SSE that
 # the emulated 486 traps as #UD.
-CFLAGS="-m32 -march=i486 -ffreestanding -fno-builtin -fno-pic -fno-stack-protector -fno-asynchronous-unwind-tables $OPT -Wall -I$SRC/apps/lib"
+# -I$SRC/apps lets an app's own headers resolve as "<app>/header.h" (e.g. BASIC's
+# "basic/program.h"); -I$SRC/apps/lib provides the SDK + kernel-API shim headers.
+CFLAGS="-m32 -march=i486 -ffreestanding -fno-builtin -fno-pic -fno-stack-protector -fno-asynchronous-unwind-tables $OPT -Wall -I$SRC/apps -I$SRC/apps/lib"
 
 OBJ="$BUILD/userobj/$APP"
 mkdir -p "$OBJ"

@@ -224,7 +224,7 @@ static const uint8_t sys_argc[SYS_COUNT] = {
     [SYS_TICKS] = 0, [SYS_KEYDOWN] = 1, [SYS_KEYDOWN_EXT] = 1, [SYS_BLIT] = 1,
     [SYS_GETFONT] = 1, [SYS_YIELD] = 0, [SYS_CLEAR] = 0, [SYS_KBFLUSH] = 0,
     [SYS_PUTAT] = 5, [SYS_SETCUR] = 2, [SYS_DIMS] = 0, [SYS_READFILE] = 3,
-    [SYS_WRITEFILE] = 3, [SYS_GETARG] = 2,
+    [SYS_WRITEFILE] = 3, [SYS_GETARG] = 2, [SYS_SETCOLOR] = 2, [SYS_HASKEY] = 0,
 };
 
 static void syscall_handler(struct isr_frame *f) {
@@ -264,6 +264,8 @@ static void syscall_handler(struct isr_frame *f) {
                            char *d = (char *)a[0]; uint32_t m = a[1], i = 0;
                            while (i + 1 < m && prog_arg[i]) { d[i] = prog_arg[i]; i++; }
                            if (m) d[i] = '\0'; break; }
+        case SYS_SETCOLOR: vga_set_color((uint8_t)a[0], (uint8_t)a[1]);  break;
+        case SYS_HASKEY:   f->eax = (uint32_t)keyboard_has_key();        break;
         default: break;
     }
 }
