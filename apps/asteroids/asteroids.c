@@ -1,34 +1,28 @@
-/* Asteroids — a vector-style game for the 800x600x8bpp graphical console.
+/* Asteroids — a ring-3 user program for Rainbow-OS.
  *
- * Renders into a RAM back buffer (fast, no bank switching) and blits it to the
- * framebuffer once per frame. Paced by the PIT timer; held-key input via the
- * keyboard driver's key-state API. All math is fixed-point (no FPU). */
+ * Ported from the in-kernel version: renders into its own RAM back buffer and
+ * reaches the kernel only through syscalls (blit, ticks, keydown, getfont,
+ * yield, clear). Fixed-point math, no FPU. */
 
-#include "asteroids.h"
-#include "drivers/svga.h"
-#include "drivers/keyboard.h"
-#include "drivers/vga.h"
-#include "drivers/timer.h"
-#include "lib/string.h"
-#include "include/types.h"
+#include "syscall.h"
+#include "types.h"
 
-#define W           SVGA_WIDTH
-#define H           SVGA_HEIGHT
+#define W           800
+#define H           600
 
-#define FBITS       8                 /* position/velocity fractional bits */
+#define FBITS       8
 #define FP(n)       ((int32_t)(n) << FBITS)
 #define TO_PX(v)    ((int32_t)(v) >> FBITS)
 
-#define ASHIFT      14                /* sin/cos table scale = 1<<14 */
+#define ASHIFT      14
 #define SIN(a)      ((int32_t)sin_tbl[(uint8_t)(a)])
 #define COS(a)      ((int32_t)sin_tbl[(uint8_t)((a) + 64)])
 
-#define FRAME_TICKS 3                 /* PIT ticks per frame (100Hz -> ~33fps) */
+#define FRAME_TICKS 3
 
 #define MAX_BULLETS 8
 #define MAX_ROCKS   64
 
-/* Colors (console palette indices 0-15) */
 #define C_BLACK     0
 #define C_WHITE     15
 #define C_CYAN      11
@@ -36,7 +30,6 @@
 #define C_RED       12
 #define C_GREY      7
 
-/* Scancodes (raw Set 1) */
 #define SC_ESC      0x01
 #define SC_W        0x11
 #define SC_Q        0x10
@@ -83,40 +76,18 @@ static const int16_t sin_tbl[256] = {
 };
 
 static uint8_t back[W * H];
+static uint8_t font[4096];
 
 static uint32_t rng = 0x1234abcd;
-static uint32_t rnd(void) {
-    rng = rng * 1103515245u + 12345u;
-    return (rng >> 16) & 0x7FFF;
-}
-static int rnd_range(int lo, int hi) {
-    return lo + (int)(rnd() % (uint32_t)(hi - lo + 1));
-}
+static uint32_t rnd(void) { rng = rng * 1103515245u + 12345u; return (rng >> 16) & 0x7FFF; }
+static int rnd_range(int lo, int hi) { return lo + (int)(rnd() % (uint32_t)(hi - lo + 1)); }
 
 /* ---- Entities ---------------------------------------------------------- */
+#define NV 10
 
-#define NV 10   /* vertices per asteroid polygon */
-
-struct ship {
-    int32_t x, y, vx, vy;
-    uint8_t angle;
-    int invuln;     /* frames of spawn invulnerability */
-};
-
-struct bullet {
-    int32_t x, y, vx, vy;
-    int life;
-    int active;
-};
-
-struct rock {
-    int32_t x, y, vx, vy;
-    int size;       /* 0 small, 1 medium, 2 large */
-    int radius;     /* px */
-    uint8_t rot, spin;
-    int8_t jag[NV];
-    int active;
-};
+struct ship   { int32_t x, y, vx, vy; uint8_t angle; int invuln; };
+struct bullet { int32_t x, y, vx, vy; int life; int active; };
+struct rock   { int32_t x, y, vx, vy; int size; int radius; uint8_t rot, spin; int8_t jag[NV]; int active; };
 
 static struct ship   ship;
 static struct bullet bullets[MAX_BULLETS];
@@ -126,10 +97,8 @@ static int score, lives, level;
 static const int rock_radius[3] = { 12, 24, 42 };
 
 /* ---- Drawing into the back buffer -------------------------------------- */
-
-static inline void px(int x, int y, uint8_t c) {
-    if ((unsigned)x < (unsigned)W && (unsigned)y < (unsigned)H)
-        back[y * W + x] = c;
+static void px(int x, int y, uint8_t c) {
+    if ((unsigned)x < (unsigned)W && (unsigned)y < (unsigned)H) back[y * W + x] = c;
 }
 
 static void gline(int x0, int y0, int x1, int y1, uint8_t c) {
@@ -149,52 +118,42 @@ static void gline(int x0, int y0, int x1, int y1, uint8_t c) {
 
 static void gfill(int x, int y, int w, int h, uint8_t c) {
     for (int yy = y; yy < y + h; yy++)
-        for (int xx = x; xx < x + w; xx++)
-            px(xx, yy, c);
+        for (int xx = x; xx < x + w; xx++) px(xx, yy, c);
 }
 
 static void gchar(int x, int y, char ch, uint8_t c) {
-    const uint8_t *g = svga_rom_font() + (uint32_t)(uint8_t)ch * 16;
+    const uint8_t *g = font + (uint32_t)(uint8_t)ch * 16;
     for (int row = 0; row < 16; row++)
         for (int col = 0; col < 8; col++)
-            if (g[row] & (0x80 >> col))
-                px(x + col, y + row, c);
+            if (g[row] & (0x80 >> col)) px(x + col, y + row, c);
 }
 
 static void gtext(int x, int y, const char *s, uint8_t c) {
-    while (*s) {
-        gchar(x, y, *s++, c);
-        x += 8;
-    }
+    while (*s) { gchar(x, y, *s++, c); x += 8; }
 }
 
 static void gnum(int x, int y, int n, uint8_t c) {
-    char buf[12];
-    int i = 0;
+    char buf[12]; int i = 0;
     if (n == 0) buf[i++] = '0';
     while (n > 0) { buf[i++] = (char)('0' + n % 10); n /= 10; }
     while (i > 0) { gchar(x, y, buf[--i], c); x += 8; }
 }
 
 /* ---- Game logic -------------------------------------------------------- */
-
 static void wrap(int32_t *x, int32_t *y) {
-    if (*x < 0)         *x += FP(W);
-    if (*x >= FP(W))    *x -= FP(W);
-    if (*y < 0)         *y += FP(H);
-    if (*y >= FP(H))    *y -= FP(H);
+    if (*x < 0)      *x += FP(W);
+    if (*x >= FP(W)) *x -= FP(W);
+    if (*y < 0)      *y += FP(H);
+    if (*y >= FP(H)) *y -= FP(H);
 }
 
 static void spawn_rock(int32_t x, int32_t y, int size) {
     for (int i = 0; i < MAX_ROCKS; i++) {
         if (rocks[i].active) continue;
         struct rock *r = &rocks[i];
-        r->active = 1;
-        r->size = size;
-        r->radius = rock_radius[size];
-        r->x = x;
-        r->y = y;
-        int spd = 80 + (2 - size) * 90;     /* smaller = faster */
+        r->active = 1; r->size = size; r->radius = rock_radius[size];
+        r->x = x; r->y = y;
+        int spd = 80 + (2 - size) * 90;
         r->vx = rnd_range(-spd, spd);
         r->vy = rnd_range(-spd, spd);
         r->rot = (uint8_t)rnd_range(0, 255);
@@ -227,16 +186,15 @@ static void new_wave(void) {
     if (n > 11) n = 11;
     for (int i = 0; i < n; i++) {
         int32_t x = FP(rnd_range(0, W - 1));
-        int32_t y = FP(rnd_range(0, 60));        /* spawn near top edge */
+        int32_t y = FP(rnd_range(0, 60));
         spawn_rock(x, y, 2);
     }
 }
 
 static void reset_ship(void) {
-    ship.x = FP(W / 2);
-    ship.y = FP(H / 2);
+    ship.x = FP(W / 2); ship.y = FP(H / 2);
     ship.vx = ship.vy = 0;
-    ship.angle = 192;    /* pointing up (screen y is down) */
+    ship.angle = 192;
     ship.invuln = 90;
 }
 
@@ -244,11 +202,10 @@ static void fire_bullet(void) {
     for (int i = 0; i < MAX_BULLETS; i++) {
         if (bullets[i].active) continue;
         struct bullet *b = &bullets[i];
-        b->active = 1;
-        b->life = 50;
+        b->active = 1; b->life = 50;
         int nose = 16;
-        b->x = ship.x + ((nose * COS(ship.angle)) << (FBITS - 0) >> ASHIFT);
-        b->y = ship.y + ((nose * SIN(ship.angle)) << (FBITS - 0) >> ASHIFT);
+        b->x = ship.x + ((nose * COS(ship.angle)) << FBITS >> ASHIFT);
+        b->y = ship.y + ((nose * SIN(ship.angle)) << FBITS >> ASHIFT);
         int spd = 2200;
         b->vx = ship.vx + ((COS(ship.angle) * spd) >> ASHIFT);
         b->vy = ship.vy + ((SIN(ship.angle) * spd) >> ASHIFT);
@@ -264,28 +221,22 @@ static void hit_rock(int idx) {
     if (size == 2)      score += 20;
     else if (size == 1) score += 50;
     else                score += 100;
-    if (size > 0) {
-        spawn_rock(x, y, size - 1);
-        spawn_rock(x, y, size - 1);
-    }
+    if (size > 0) { spawn_rock(x, y, size - 1); spawn_rock(x, y, size - 1); }
 }
 
 static int count_rocks(void) {
     int n = 0;
-    for (int i = 0; i < MAX_ROCKS; i++)
-        if (rocks[i].active) n++;
+    for (int i = 0; i < MAX_ROCKS; i++) if (rocks[i].active) n++;
     return n;
 }
 
-/* Returns 1 if the player asked to quit. */
 static int read_quit(void) {
-    return keyboard_is_down(SC_Q) || keyboard_is_down(SC_ESC);
+    return sys_keydown(SC_Q) || sys_keydown(SC_ESC);
 }
 
 static void draw_ship(int blink) {
     if (blink) return;
     int cx = TO_PX(ship.x), cy = TO_PX(ship.y);
-    /* local triangle: nose +x, two rear corners */
     static const int lx[3] = { 16, -10, -10 };
     static const int ly[3] = {  0,  -9,   9 };
     int sxp[3], syp[3];
@@ -310,59 +261,46 @@ static void render(int frame) {
 
     draw_ship(ship.invuln > 0 && (frame & 4));
 
-    gtext(10, 8, "SCORE", C_WHITE);
-    gnum(58, 8, score, C_WHITE);
-    gtext(W - 110, 8, "LIVES", C_WHITE);
-    gnum(W - 38, 8, lives, C_WHITE);
+    gtext(10, 8, "SCORE", C_WHITE); gnum(58, 8, score, C_WHITE);
+    gtext(W - 110, 8, "LIVES", C_WHITE); gnum(W - 38, 8, lives, C_WHITE);
 
-    svga_blit(back);
+    sys_blit(back);
 }
 
-void asteroids_run(void) {
-    rng ^= timer_ticks() * 2654435761u + 1;
-    score = 0;
-    lives = 3;
-    level = 0;
+int main(void) {
+    sys_getfont(font);
+    rng ^= sys_ticks() * 2654435761u + 1;
+    score = 0; lives = 3; level = 0;
     for (int i = 0; i < MAX_BULLETS; i++) bullets[i].active = 0;
     for (int i = 0; i < MAX_ROCKS; i++)   rocks[i].active = 0;
     reset_ship();
     new_wave();
 
-    int fire_cd = 0;
-    int frame = 0;
-    uint32_t last = timer_ticks();
-    int running = 1;
-    int gameover = 0;
+    int fire_cd = 0, frame = 0, running = 1, gameover = 0;
+    uint32_t last = sys_ticks();
 
     while (running) {
-        while (timer_ticks() - last < FRAME_TICKS)
-            __asm__ volatile("hlt");
+        while (sys_ticks() - last < FRAME_TICKS) sys_yield();
         last += FRAME_TICKS;
         frame++;
 
-        /* ---- input ---- */
         if (read_quit()) break;
-        if (keyboard_is_down(SC_A) || keyboard_is_ext_down(EXT_LEFT))  ship.angle -= 5;
-        if (keyboard_is_down(SC_D) || keyboard_is_ext_down(EXT_RIGHT)) ship.angle += 5;
-        if (keyboard_is_down(SC_W) || keyboard_is_ext_down(EXT_UP)) {
+        if (sys_keydown(SC_A) || sys_keydown_ext(EXT_LEFT))  ship.angle -= 5;
+        if (sys_keydown(SC_D) || sys_keydown_ext(EXT_RIGHT)) ship.angle += 5;
+        if (sys_keydown(SC_W) || sys_keydown_ext(EXT_UP)) {
             ship.vx += (COS(ship.angle) * 40) >> ASHIFT;
             ship.vy += (SIN(ship.angle) * 40) >> ASHIFT;
         }
         if (fire_cd > 0) fire_cd--;
-        if (keyboard_is_down(SC_SPACE) && fire_cd == 0) {
-            fire_bullet();
-            fire_cd = 8;
-        }
+        if (sys_keydown(SC_SPACE) && fire_cd == 0) { fire_bullet(); fire_cd = 8; }
 
-        /* ---- update ship ---- */
-        ship.vx -= ship.vx >> 6;     /* drag */
+        ship.vx -= ship.vx >> 6;
         ship.vy -= ship.vy >> 6;
         ship.x += ship.vx;
         ship.y += ship.vy;
         wrap(&ship.x, &ship.y);
         if (ship.invuln > 0) ship.invuln--;
 
-        /* ---- update bullets ---- */
         for (int i = 0; i < MAX_BULLETS; i++) {
             if (!bullets[i].active) continue;
             bullets[i].x += bullets[i].vx;
@@ -371,7 +309,6 @@ void asteroids_run(void) {
             if (--bullets[i].life <= 0) bullets[i].active = 0;
         }
 
-        /* ---- update rocks ---- */
         for (int i = 0; i < MAX_ROCKS; i++) {
             if (!rocks[i].active) continue;
             rocks[i].x += rocks[i].vx;
@@ -380,7 +317,6 @@ void asteroids_run(void) {
             rocks[i].rot += rocks[i].spin;
         }
 
-        /* ---- collisions: bullet vs rock ---- */
         for (int b = 0; b < MAX_BULLETS; b++) {
             if (!bullets[b].active) continue;
             int bx = TO_PX(bullets[b].x), by = TO_PX(bullets[b].y);
@@ -389,15 +325,10 @@ void asteroids_run(void) {
                 int dx = bx - TO_PX(rocks[r].x);
                 int dy = by - TO_PX(rocks[r].y);
                 int rad = rocks[r].radius;
-                if (dx * dx + dy * dy < rad * rad) {
-                    bullets[b].active = 0;
-                    hit_rock(r);
-                    break;
-                }
+                if (dx * dx + dy * dy < rad * rad) { bullets[b].active = 0; hit_rock(r); break; }
             }
         }
 
-        /* ---- collisions: ship vs rock ---- */
         if (ship.invuln == 0) {
             int sx = TO_PX(ship.x), sy = TO_PX(ship.y);
             for (int r = 0; r < MAX_ROCKS; r++) {
@@ -419,23 +350,18 @@ void asteroids_run(void) {
         render(frame);
     }
 
-    /* ---- game over screen (only on death, not on quit) ---- */
     if (gameover) {
         memset(back, C_BLACK, sizeof(back));
         gtext(W / 2 - 36, H / 2 - 40, "GAME OVER", C_RED);
         gtext(W / 2 - 60, H / 2,      "SCORE", C_WHITE);
         gnum(W / 2 - 60 + 48, H / 2, score, C_WHITE);
         gtext(W / 2 - 84, H / 2 + 40, "PRESS A KEY TO RETURN", C_GREY);
-        svga_blit(back);
-        keyboard_flush();
-        keyboard_getchar();          /* block until any key */
+        sys_blit(back);
+        sys_kbflush();
+        sys_getchar();
     }
 
-    keyboard_flush();
-    vga_clear();
-    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-    vga_write("[OK] Returned to console (final score ");
-    vga_write_dec((uint32_t)score);
-    vga_write(")\n");
-    vga_set_color(VGA_WHITE, VGA_BLACK);
+    sys_kbflush();
+    sys_clear();
+    return score;
 }

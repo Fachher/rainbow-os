@@ -25,7 +25,6 @@ set(KERNEL_SOURCES
     kernel/fs/ramdisk.c
     kernel/fs/diskfs.c
     kernel/shell/shell.c
-    kernel/game/asteroids.c
     kernel/debug/debugger.c
     kernel/debug/disasm.c
     kernel/lib/string.c
@@ -98,6 +97,8 @@ add_custom_target(floppy ALL
 add_custom_target(userapps ALL
     COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/build-userapp.sh
         ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} invaders
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/build-userapp.sh
+        ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR} asteroids
     COMMENT "Building userland apps"
 )
 
@@ -109,6 +110,8 @@ add_custom_target(rootfs ALL
         ${CMAKE_BINARY_DIR}/rootfs.img
     COMMAND mcopy -i ${CMAKE_BINARY_DIR}/rootfs.img
         ${CMAKE_BINARY_DIR}/invaders.bin ::invaders.bin
+    COMMAND mcopy -i ${CMAKE_BINARY_DIR}/rootfs.img
+        ${CMAKE_BINARY_DIR}/asteroids.bin ::asteroid.bin   # 8.3: "asteroids" > 8 chars
     COMMENT "Creating FAT12 filesystem image"
 )
 
